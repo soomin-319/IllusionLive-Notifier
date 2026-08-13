@@ -55,17 +55,18 @@ public final class MainActivity extends Activity {
     // illusionlive.com palette: #353958 is the site's declared brand colour, #757DBD its link
     // tone, #212121 its body text. Modern treatment (gradient, large radii, pills) on top.
     // Not final: applyTheme() swaps the whole set for the dark one before any view is built.
-    private static int BRAND = 0xFF353958;
+    // Package-private: TutorialArt paints its mock-ups with the same live palette.
+    static int BRAND = 0xFF353958;
     private static int BRAND_DEEP = 0xFF222438;
     private static int BRAND_LIGHT = 0xFF5A6096;
-    private static int ACCENT = 0xFF757DBD;
-    private static int CANVAS = 0xFFF4F5F9;
-    private static int SURFACE = 0xFFFFFFFF;
-    private static int INK = 0xFF212121;
-    private static int MUTED = 0xFF6B6F86;
-    private static int LINE = 0xFFE4E6EF;
+    static int ACCENT = 0xFF757DBD;
+    static int CANVAS = 0xFFF4F5F9;
+    static int SURFACE = 0xFFFFFFFF;
+    static int INK = 0xFF212121;
+    static int MUTED = 0xFF6B6F86;
+    static int LINE = 0xFFE4E6EF;
     private static int CHIP = 0xFFE9EAF3;
-    private static int ON_BRAND = 0xFFFFFFFF;
+    static int ON_BRAND = 0xFFFFFFFF;
     private static final int ON_BRAND_SOFT = 0x33FFFFFF;
     private static final int PULL_DP = 72;
     private static final String STATE_SETTINGS_SHOWN = "settings_shown";
@@ -422,9 +423,24 @@ public final class MainActivity extends Activity {
 
     // -------------------------------------------------------------- first run
 
+    /** Title and body of each tutorial page; the picture for it lives in {@link TutorialArt}. */
+    private static final String[][] TUTORIAL = {
+            {"알림 받을 게시판 고르기",
+                    "오른쪽 위 톱니바퀴를 누르면 게시판 목록이 열립니다.\n체크한 게시판의 새 글만 알려 드립니다."},
+            {"당겨서 새로고침",
+                    "목록 맨 위에서 아래로 당기면\n새 글을 바로 확인합니다."},
+            {"글 열어보기",
+                    "글을 누르면 브라우저에서\n원문이 열립니다."},
+            {"앱을 닫아도 알림",
+                    "백그라운드에서 새 글을 확인해 알림을 보냅니다.\nAndroid 절전 상태에서는 조금 늦어질 수 있습니다."},
+            {"지금 있는 글은 알리지 않아요",
+                    "첫 실행 시점의 글은 기준으로만 저장하고,\n이후 올라오는 새 글부터 알려 드립니다."}
+    };
+
     /**
-     * One card over everything on the very first launch. Added to the window rather than to
-     * {@link #content}, so the tabs cannot swap it away before it is dismissed.
+     * A paged card over everything on the very first launch: one drawn example per step. Added to
+     * the window rather than to {@link #content}, so the tabs cannot swap it away before it is
+     * dismissed.
      */
     private void maybeShowTutorial() {
         final SharedPreferences preferences = FeedChecker.prefs(this);
@@ -435,37 +451,90 @@ public final class MainActivity extends Activity {
         scrim.setClickable(true); // swallow taps meant for the list underneath
 
         LinearLayout card = card();
-        card.addView(sectionTitle("일루전 라이브 알리미"), matchWrap(dp(12)));
-        for (String step : new String[]{
-                "오른쪽 위 톱니바퀴에서 알림 받을 게시판을 고르세요.",
-                "목록을 아래로 당기면 새로고침됩니다.",
-                "글을 누르면 원문이 열립니다.",
-                "앱을 닫아도 새 글을 확인해 알려 드립니다.",
-                "처음 실행한 지금의 글은 알리지 않고 기준으로만 저장합니다."}) {
-            TextView line = text("· " + step, 14.5f);
-            line.setTextColor(MUTED);
-            card.addView(line, matchWrap(dp(9)));
-        }
 
-        TextView start = text("시작하기", 15.5f);
-        start.setTypeface(Typeface.DEFAULT_BOLD);
-        start.setTextColor(ON_BRAND);
-        start.setGravity(Gravity.CENTER);
-        start.setPadding(0, dp(13), 0, dp(13));
-        start.setBackground(ripple(BRAND, 12, ON_BRAND));
-        start.setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View view) {
+        final TutorialArt art = new TutorialArt(this);
+        LinearLayout.LayoutParams artParams = new LinearLayout.LayoutParams(-1, dp(178));
+        artParams.setMargins(0, dp(4), 0, dp(16));
+        card.addView(art, artParams);
+
+        final TextView title = sectionTitle("");
+        card.addView(title, matchWrap(dp(8)));
+
+        final TextView body = text("", 14.5f);
+        body.setTextColor(MUTED);
+        body.setLineSpacing(dp(4), 1f);
+        body.setMinLines(2); // keeps the card from resizing between pages
+        card.addView(body, matchWrap(dp(16)));
+
+        final LinearLayout dots = new LinearLayout(this);
+        dots.setOrientation(LinearLayout.HORIZONTAL);
+        dots.setGravity(Gravity.CENTER);
+        for (int i = 0; i < TUTORIAL.length; i++) {
+            LinearLayout.LayoutParams dotParams = new LinearLayout.LayoutParams(dp(7), dp(7));
+            dotParams.setMargins(dp(4), 0, dp(4), 0);
+            dots.addView(new View(this), dotParams);
+        }
+        card.addView(dots, matchWrap(dp(16)));
+
+        final TextView skip = text("건너뛰기", 15f);
+        skip.setTextColor(MUTED);
+        skip.setGravity(Gravity.CENTER);
+        skip.setPadding(dp(16), dp(13), dp(16), dp(13));
+        skip.setBackground(ripple(SURFACE, 12, MUTED));
+
+        final TextView next = text("", 15.5f);
+        next.setTypeface(Typeface.DEFAULT_BOLD);
+        next.setTextColor(ON_BRAND);
+        next.setGravity(Gravity.CENTER);
+        next.setPadding(0, dp(13), 0, dp(13));
+        next.setBackground(ripple(BRAND, 12, ON_BRAND));
+
+        LinearLayout buttons = new LinearLayout(this);
+        buttons.setOrientation(LinearLayout.HORIZONTAL);
+        buttons.addView(skip, new LinearLayout.LayoutParams(-2, -2));
+        LinearLayout.LayoutParams nextParams = new LinearLayout.LayoutParams(0, -2, 1);
+        nextParams.setMargins(dp(10), 0, 0, 0);
+        buttons.addView(next, nextParams);
+        card.addView(buttons, new LinearLayout.LayoutParams(-1, -2));
+
+        final int[] step = {0};
+        final Runnable render = new Runnable() {
+            @Override public void run() {
+                art.setStep(step[0]);
+                title.setText(TUTORIAL[step[0]][0]);
+                body.setText(TUTORIAL[step[0]][1]);
+                for (int i = 0; i < dots.getChildCount(); i++)
+                    dots.getChildAt(i).setBackground(rounded(i == step[0] ? BRAND : LINE, 4, 0));
+                boolean last = step[0] == TUTORIAL.length - 1;
+                next.setText(last ? "시작하기" : "다음");
+                skip.setVisibility(last ? View.GONE : View.VISIBLE);
+            }
+        };
+
+        final Runnable dismiss = new Runnable() {
+            @Override public void run() {
                 preferences.edit().putBoolean(FeedChecker.KEY_TUTORIAL_SEEN, true).commit();
                 ((ViewGroup) scrim.getParent()).removeView(scrim);
             }
+        };
+        skip.setOnClickListener(view -> dismiss.run());
+        next.setOnClickListener(view -> {
+            if (step[0] == TUTORIAL.length - 1) {
+                dismiss.run();
+                return;
+            }
+            step[0]++;
+            render.run();
         });
-        LinearLayout.LayoutParams startParams = new LinearLayout.LayoutParams(-1, -2);
-        startParams.setMargins(0, dp(8), 0, 0);
-        card.addView(start, startParams);
+        art.setOnClickListener(view -> next.performClick()); // tapping the picture moves on too
+        render.run();
 
+        // The card scrolls on short screens rather than pushing its buttons off the bottom.
+        ScrollView cardScroll = new ScrollView(this);
+        cardScroll.addView(card, new ScrollView.LayoutParams(-1, -2));
         FrameLayout.LayoutParams cardParams = new FrameLayout.LayoutParams(-1, -2, Gravity.CENTER);
         cardParams.setMargins(dp(22), dp(22), dp(22), dp(22));
-        scrim.addView(card, cardParams);
+        scrim.addView(cardScroll, cardParams);
         getWindow().addContentView(scrim, new FrameLayout.LayoutParams(-1, -1));
     }
 
