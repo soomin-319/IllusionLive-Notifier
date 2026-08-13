@@ -4,7 +4,7 @@
 
 ## 설치
 
-1. `IllusionLiveNotifier.apk`를 Android 기기로 복사해 실행
+1. [최신 릴리스](https://github.com/soomin-319/IllusionLive-Notifier/releases/latest)에서 `IllusionLiveNotifier.apk`를 Android 기기로 내려받아 실행
 2. 요청되면 **이 출처의 알 수 없는 앱 설치** 허용
 3. 앱 실행 후 **알림 권한** 허용
 

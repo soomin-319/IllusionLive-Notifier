@@ -18,12 +18,25 @@ IllusionLive Notifier — `https://www.illusionlive.com/rss` 새 글 알림. And
 
 프로젝트 파일을 수정하면 작업 완료 후 반드시 PR까지 만든다. `main`에 직접 커밋하지 않는다.
 
-1. 작업 브랜치 생성 (`git checkout -b <type>/<short-name>`)
+1. 최신 `main` 기반으로 작업 브랜치 생성 — 다른 브랜치 위에 쌓지 않는다
+
+   ```powershell
+   git fetch origin
+   git checkout -b <type>/<short-name> origin/main
+   ```
+
 2. 변경 사항 커밋 — 커밋 메시지는 Conventional Commits (`feat:`, `fix:`, `docs:`, `chore:` …)
 3. `git push -u origin <branch>`
 4. `gh pr create` 로 PR 생성 — 제목은 커밋 타입 접두사 유지, 본문에 변경 요약과 검증 방법 기재
 
-PR 생성 전 관련 빌드/테스트가 통과하는지 확인한다 (Android는 `./build-android.ps1` 이 `SelfTest` 를 함께 실행).
+PR 생성 전 확인:
+
+- 빌드/테스트 통과 (Android는 `./build-android.ps1` 이 `SelfTest` 를 함께 실행)
+- PR base 가 `main` 이고 브랜치가 `origin/main` 위에 선형으로 쌓였는지:
+
+  ```powershell
+  git merge-base --is-ancestor origin/main HEAD   # 실패하면 origin/main 위로 rebase
+  ```
 
 ## 규칙: APK 빌드 산출물은 다운로드 폴더에 압축 저장
 

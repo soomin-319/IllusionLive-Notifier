@@ -16,14 +16,14 @@
 
 ## 설치
 
-1. `IllusionLiveNotifier.apk`를 Android 기기로 복사해 실행
+1. [최신 릴리스](https://github.com/soomin-319/IllusionLive-Notifier/releases/latest)에서 `IllusionLiveNotifier.apk`를 Android 기기로 내려받아 실행
 2. 요청되면 **이 출처의 알 수 없는 앱 설치** 허용
 3. 앱 실행 후 **알림 권한** 허용
 4. 오른쪽 위 톱니바퀴에서 알림 받을 게시판과 키워드 설정
 
 요구 버전: Android 8.0 (API 26) 이상.
 
-APK는 로컬 자체 서명 빌드입니다. Play Store 배포본이 아니라서 설치 시 경고가 표시될 수 있습니다. 출처를 확인한 뒤 설치하거나 아래 명령으로 직접 빌드하세요.
+APK는 로컬 자체 서명 빌드입니다. Play Store 배포본이 아니라서 설치 시 경고가 표시될 수 있습니다. 각 릴리스 노트에 APK의 SHA-256 해시와 서명 인증서 지문이 적혀 있으니 확인한 뒤 설치하거나, 아래 명령으로 직접 빌드하세요.
 
 ## 직접 빌드
 
