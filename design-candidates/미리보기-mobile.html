@@ -1,0 +1,272 @@
+<style>
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css');
+*{margin:0;padding:0;box-sizing:border-box}
+body{width:1848px;height:934px;background:#fff;font-family:Pretendard,'맑은 고딕',sans-serif;
+ -webkit-font-smoothing:antialiased;display:flex;gap:56px;padding:34px 40px}
+
+/* ---- shell ---- */
+/* Palette mirrors MainActivity.applyTheme(): light set here, dark set on .phone.night */
+.col{width:400px;display:flex;flex-direction:column}
+.cap{font-size:15px;font-weight:700;color:#3A3D52;margin:0 0 12px 4px}
+.phone{--canvas:#F4F5F9;--surface:#fff;--ink:#212121;--muted:#6B6F86;--line:#E4E6EF;
+ --chip:#E9EAF3;--brand:#353958;--accent:#757DBD;--on-brand:#fff;--g1:#222438;--g2:#5A6096;
+ position:relative;width:400px;height:820px;border-radius:34px;overflow:hidden;
+ background:var(--canvas);border:1px solid #DCDEE9;box-shadow:0 10px 26px rgba(34,36,56,.13);
+ display:flex;flex-direction:column}
+.phone.night{--canvas:#101119;--surface:#1B1D28;--ink:#ECEDF3;--muted:#9195AB;--line:#2B2E3C;
+ --chip:#262939;--brand:#A9B0E8;--accent:#8F97D8;--on-brand:#14151E;--g1:#15161F;--g2:#3A3F62;
+ border-color:#2B2E3C}
+
+/* ---- android status bar ---- */
+.sysbar{display:flex;align-items:center;height:26px;padding:0 4px;font-size:12.5px;
+ font-weight:600;color:#fff;letter-spacing:.2px}
+.sysbar .ic{margin-left:auto;display:flex;align-items:flex-end;gap:5px}
+.sig{display:flex;align-items:flex-end;gap:1.5px}
+.sig s{display:block;width:2.5px;background:#fff;border-radius:1px;text-decoration:none}
+.sig s:nth-child(1){height:4px}.sig s:nth-child(2){height:6px}
+.sig s:nth-child(3){height:8px}.sig s:nth-child(4){height:10px}
+.wifi{width:13px;height:10px;background:#fff;
+ clip-path:polygon(50% 4%,100% 96%,0 96%)}
+.bat{width:19px;height:10px;border:1.4px solid #fff;border-radius:2.5px;position:relative}
+.bat::before{content:'';position:absolute;left:1.4px;top:1.4px;bottom:1.4px;width:11px;background:#fff;
+ border-radius:1px}
+.bat::after{content:'';position:absolute;right:-3.4px;top:3px;width:2px;height:4px;background:#fff;
+ border-radius:0 1px 1px 0}
+.dark .sysbar{color:#212121}
+.dark .sig s,.dark .wifi,.dark .bat::before,.dark .bat::after{background:#212121}
+.dark .bat{border-color:#212121}
+
+/* ---- header ---- */
+.head{padding:12px 18px 14px;background:linear-gradient(135deg,var(--g1) 0%,var(--g2) 100%)}
+.bar{display:flex;align-items:center}
+.head h1{flex:1;font-size:21px;font-weight:700;color:#fff;letter-spacing:-.5px}
+/* the gear is res/drawable/ic_settings_gear.xml — same path, so the preview cannot drift */
+.gear{flex:none;width:42px;height:42px;border-radius:21px;background:rgba(255,255,255,.2);
+ display:flex;align-items:center;justify-content:center;color:#fff}
+.gear svg{width:24px;height:24px;fill:currentColor}
+.gear.on{background:var(--surface);color:var(--brand)}
+
+/* ---- shared ---- */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px}
+.body{flex:1;min-height:0;padding:12px;display:flex;flex-direction:column}
+
+/* ---- recent tab ---- */
+.list{flex:1;min-height:0;overflow:hidden}
+.post{padding:13px 16px;border-bottom:1px solid var(--line)}
+.post b{display:block;font-size:15.5px;font-weight:700;color:var(--ink);letter-spacing:-.4px;
+ overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.post i{display:block;font-style:normal;font-size:12.5px;color:var(--muted);margin-top:4px}
+/* member name in the member's own colour. Pale palette entries (냐루 #D0FAFF, 청예솔 #FDF3EA)
+   are unreadable as text, so MemberColors.readableOn() saturates then dims them to 4.5:1 —
+   same hue, printed here as the resulting hex. On the dark canvas there is no room below, so
+   the same call lifts dark members instead and the pale ones come back untouched. */
+.post i em{font-style:normal;font-weight:700}
+/* 도라리 · 서몽 hold two colours: the name runs across both (LinearGradient on Android) */
+.post i em.two{background:linear-gradient(90deg,#89733F,#497E86);-webkit-background-clip:text;
+ background-clip:text;color:transparent}
+
+/* ---- first-run tutorial ---- */
+.scrim{position:absolute;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;
+ justify-content:center;padding:22px}
+.tut{width:100%;padding:14px 16px 16px}
+.tut h2{font-size:18px;font-weight:700;color:var(--ink);margin-bottom:12px}
+.tut p{font-size:14.5px;color:var(--muted);margin-bottom:9px;line-height:1.4}
+.start{margin-top:8px;padding:13px 0;border-radius:12px;background:var(--brand);color:var(--on-brand);
+ font-size:15.5px;font-weight:700;text-align:center}
+
+/* ---- settings tab ---- */
+.scroll{flex:1;min-height:0;padding:12px;overflow:hidden;display:flex;flex-direction:column}
+.pad{padding:14px 16px 16px}
+.chk{display:flex;align-items:center;font-size:16px;color:var(--ink)}
+.chk .box{flex:none;width:18px;height:18px;border-radius:2px;background:var(--accent);margin-right:14px;
+ position:relative}
+/* the checkbox drawable comes from Theme.Material.Light, so the tick stays white in both themes */
+.chk .box::after{content:'';position:absolute;left:6px;top:2.5px;width:5px;height:9px;
+ border:solid #fff;border-width:0 2px 2px 0;transform:rotate(42deg)}
+.chk.sm{font-size:15.5px}
+.guide{font-size:13px;color:var(--muted);margin-top:6px;line-height:1.45}
+.h2{font-size:18px;font-weight:700;color:var(--ink);margin-bottom:4px}
+.hint{font-size:12.5px;color:var(--muted);margin-bottom:12px;line-height:1.4}
+/* neutral chip throughout; 공식 · 비비 · 기타 keep the brand text colour, members get theirs */
+.chip{display:inline-block;padding:5px 12px 6px;background:var(--chip);border-radius:9px;font-size:12.5px;
+ font-weight:700;color:var(--brand);margin-bottom:6px}
+.rowsep{height:1px;background:var(--line);margin:12px 0}
+
+/* ---- notification shade ---- */
+.shade{flex:1;background:#EEEFF5;padding:0 12px;display:flex;flex-direction:column}
+.shade .when{font-size:13px;color:#4A4D63;padding:6px 8px 12px;font-weight:600}
+.noti{background:#fff;border-radius:26px;padding:15px 18px 17px;margin-bottom:10px;
+ box-shadow:0 1px 3px rgba(34,36,56,.12)}
+.noti .app{display:flex;align-items:center;font-size:12px;color:#5D6076;margin-bottom:8px}
+.noti .app .dot{width:17px;height:17px;border-radius:50%;margin-right:8px;
+ background:linear-gradient(135deg,#222438 0%,#5A6096 100%);position:relative}
+.noti .app .dot::after{content:'';position:absolute;left:4.5px;top:4px;width:8px;height:7px;
+ background:#fff;border-radius:4px 4px 1.5px 1.5px}
+.noti .app .num{margin-left:auto;color:#8A8DA0}
+.noti h3{font-size:15.5px;font-weight:700;color:#212121;letter-spacing:-.3px}
+.noti .sub{font-size:13.5px;color:#4A4D63;margin-top:3px}
+.noti .lines{margin-top:7px}
+.noti .lines div{font-size:13px;color:#5D6076;margin-top:3px;overflow:hidden;
+ text-overflow:ellipsis;white-space:nowrap}
+.noti .sum{font-size:12px;color:#8A8DA0;margin-top:7px}
+</style>
+
+<!-- the gear path is copied from res/drawable/ic_settings_gear.xml -->
+<svg width="0" height="0" style="position:absolute"><symbol id="gear" viewBox="0 0 24 24"><path
+ d="M19.14,12.94c0.04,-0.3 0.06,-0.61 0.06,-0.94c0,-0.32 -0.02,-0.64 -0.07,-0.94l2.03,-1.58c0.18,-0.14 0.23,-0.41 0.12,-0.61l-1.92,-3.32c-0.12,-0.22 -0.37,-0.29 -0.59,-0.22l-2.39,0.96c-0.5,-0.38 -1.03,-0.7 -1.62,-0.94L14.4,2.81c-0.04,-0.24 -0.24,-0.41 -0.48,-0.41h-3.84c-0.24,0 -0.43,0.17 -0.47,0.41L9.25,5.35C8.66,5.59 8.12,5.92 7.63,6.29L5.24,5.33c-0.22,-0.08 -0.47,0 -0.59,0.22L2.74,8.87C2.62,9.08 2.66,9.34 2.86,9.48l2.03,1.58C4.84,11.36 4.8,11.69 4.8,12s0.02,0.64 0.07,0.94l-2.03,1.58c-0.18,0.14 -0.23,0.41 -0.12,0.61l1.92,3.32c0.12,0.22 0.37,0.29 0.59,0.22l2.39,-0.96c0.5,0.38 1.03,0.7 1.62,0.94l0.36,2.54c0.05,0.24 0.24,0.41 0.48,0.41h3.84c0.24,0 0.44,-0.17 0.47,-0.41l0.36,-2.54c0.59,-0.24 1.13,-0.56 1.62,-0.94l2.39,0.96c0.22,0.08 0.47,0 0.59,-0.22l1.92,-3.32c0.12,-0.22 0.07,-0.47 -0.12,-0.61L19.14,12.94zM12,15.6c-1.98,0 -3.6,-1.62 -3.6,-3.6s1.62,-3.6 3.6,-3.6s3.6,1.62 3.6,3.6S13.98,15.6 12,15.6z"
+ /></symbol></svg>
+
+<!-- ============ 1. 첫 실행 안내 ============ -->
+<div class="col">
+ <div class="cap">첫 실행 안내</div>
+ <div class="phone">
+  <div class="head">
+   <div class="sysbar">11:52<div class="ic">
+    <div class="sig"><s></s><s></s><s></s><s></s></div><div class="wifi"></div><div class="bat"></div>
+   </div></div>
+   <div class="bar"><h1>일루전 라이브 알리미</h1><div class="gear"><svg><use href="#gear"/></svg></div></div>
+  </div>
+  <div class="body">
+   <div class="list card">
+    <div class="post"><b>수염이 말대로 로또사니까</b><i><em class="two">서몽</em> · 서몽 게시판 · 그레이샤 · 08-12 11:12</i></div>
+    <div class="post"><b>노래추천-지금까지 노력했던 너를 사랑해</b><i><em style="color:#975F52">소히</em> · 소랑이가 할말있어 · 라온 · 08-12 11:05</i></div>
+    <div class="post"><b>김범수가 애니OST 월드컵 했는데</b><i><em class="two">서몽</em> · 서몽 게시판 · 노쉬 · 08-12 01:45</i></div>
+    <div class="post"><b>영화 보고 오기</b><i><em style="color:#457A7F">냐루</em> · 냐묄 놀이터 · 노쉬 · 08-11 23:38</i></div>
+    <div class="post"><b>현재 알바생 현타온 더벤티 신메뉴</b><i><em style="color:#457A7F">냐루</em> · 냐묄 놀이터 · 진태 · 08-11 23:12</i></div>
+    <div class="post"><b>의외로 동물계 주량 원탑 생물</b><i><em style="color:#975F52">소히</em> · 소랑이가 할말있어 · 9948 · 08-11 22:56</i></div>
+    <div class="post"><b>요즘 내가 푹 빠진 악기</b><i><em style="color:#975F52">소히</em> · 소랑이가 할말있어 · 소히빵디 · 08-11 21:54</i></div>
+    <div class="post"><b>~8월 11일 방종 일기~</b><i><em style="color:#8B734B">위즐리어카</em> · 사서님 서한 · 위즐리어카 · 08-11 21:15</i></div>
+    <div class="post"><b>왕크왕귀</b><i><em style="color:#413C40">코메</em> · 선장 이거봐! · 그란드림 · 08-11 19:22</i></div>
+    <div class="post"><b>나루 잘하네</b><i><em style="color:#457A7F">냐루</em> · 냐묄 놀이터 · 겨자쿠키 · 08-11 15:07</i></div>
+    <div class="post"><b>오늘 방송 진짜 재밌었다</b><i><em style="color:#975F52">소히</em> · 소랑이가 할말있어 · 소랑둥이 · 08-11 13:41</i></div>
+   </div>
+  </div>
+  <div class="scrim">
+   <div class="tut card">
+    <h2>일루전 라이브 알리미</h2>
+    <p>· 오른쪽 위 톱니바퀴에서 알림 받을 게시판을 고르세요.</p>
+    <p>· 목록을 아래로 당기면 새로고침됩니다.</p>
+    <p>· 글을 누르면 원문이 열립니다.</p>
+    <p>· 앱을 닫아도 새 글을 확인해 알려 드립니다.</p>
+    <p>· 처음 실행한 지금의 글은 알리지 않고 기준으로만 저장합니다.</p>
+    <div class="start">시작하기</div>
+   </div>
+  </div>
+ </div>
+</div>
+
+<!-- ============ 2. 최근 글 ============ -->
+<div class="col">
+ <div class="cap">최근 글</div>
+ <div class="phone">
+  <div class="head">
+   <div class="sysbar">11:52<div class="ic">
+    <div class="sig"><s></s><s></s><s></s><s></s></div><div class="wifi"></div><div class="bat"></div>
+   </div></div>
+   <div class="bar"><h1>일루전 라이브 알리미</h1><div class="gear"><svg><use href="#gear"/></svg></div></div>
+  </div>
+  <div class="body">
+   <div class="list card">
+    <div class="post"><b>수염이 말대로 로또사니까</b><i><em class="two">서몽</em> · 서몽 게시판 · 그레이샤 · 08-12 11:12</i></div>
+    <div class="post"><b>노래추천-지금까지 노력했던 너를 사랑해</b><i><em style="color:#975F52">소히</em> · 소랑이가 할말있어 · 라온 · 08-12 11:05</i></div>
+    <div class="post"><b>김범수가 애니OST 월드컵 했는데</b><i><em class="two">서몽</em> · 서몽 게시판 · 노쉬 · 08-12 01:45</i></div>
+    <div class="post"><b>영화 보고 오기</b><i><em style="color:#457A7F">냐루</em> · 냐묄 놀이터 · 노쉬 · 08-11 23:38</i></div>
+    <div class="post"><b>현재 알바생 현타온 더벤티 신메뉴</b><i><em style="color:#457A7F">냐루</em> · 냐묄 놀이터 · 진태 · 08-11 23:12</i></div>
+    <div class="post"><b>의외로 동물계 주량 원탑 생물</b><i><em style="color:#975F52">소히</em> · 소랑이가 할말있어 · 9948 · 08-11 22:56</i></div>
+    <div class="post"><b>요즘 내가 푹 빠진 악기</b><i><em style="color:#975F52">소히</em> · 소랑이가 할말있어 · 소히빵디 · 08-11 21:54</i></div>
+    <div class="post"><b>~8월 11일 방종 일기~</b><i><em style="color:#8B734B">위즐리어카</em> · 사서님 서한 · 위즐리어카 · 08-11 21:15</i></div>
+    <div class="post"><b>왕크왕귀</b><i><em style="color:#413C40">코메</em> · 선장 이거봐! · 그란드림 · 08-11 19:22</i></div>
+    <div class="post"><b>나루 잘하네</b><i><em style="color:#457A7F">냐루</em> · 냐묄 놀이터 · 겨자쿠키 · 08-11 15:07</i></div>
+    <div class="post"><b>오늘 방송 진짜 재밌었다</b><i><em style="color:#975F52">소히</em> · 소랑이가 할말있어 · 소랑둥이 · 08-11 13:41</i></div>
+   </div>
+  </div>
+ </div>
+</div>
+
+<!-- ============ 3. 알림 설정 (다크 모드) ============ -->
+<div class="col">
+ <div class="cap">알림 설정 · 다크 모드</div>
+ <div class="phone night">
+  <div class="head">
+   <div class="sysbar">11:52<div class="ic">
+    <div class="sig"><s></s><s></s><s></s><s></s></div><div class="wifi"></div><div class="bat"></div>
+   </div></div>
+   <div class="bar"><h1>일루전 라이브 알리미</h1><div class="gear on"><svg><use href="#gear"/></svg></div></div>
+  </div>
+  <div class="scroll">
+   <div class="card pad" style="margin-bottom:18px">
+    <div class="chk"><span class="box"></span>다크 모드</div>
+   </div>
+   <div class="card pad" style="margin-bottom:18px">
+    <div class="chk"><span class="box"></span>백그라운드 새 글 알림</div>
+    <div class="guide">앱이 닫혀 있어도 새 글을 자동으로 확인합니다. Android 절전 상태에서는 알림이 조금 늦어질 수 있습니다.</div>
+   </div>
+   <div class="h2">게시판별 알림</div>
+   <div class="hint">체크한 게시판의 새 글만 알립니다. 변경은 바로 저장됩니다.</div>
+   <div class="chip">공식</div>
+   <div class="card pad" style="margin-bottom:16px">
+    <div class="chk sm"><span class="box"></span>최신 소식</div>
+    <div class="rowsep"></div>
+    <div class="chk sm"><span class="box"></span>통합 커뮤니티</div>
+   </div>
+   <!-- on the dark chip the pale member colours already clear 4.5:1, so they print as declared -->
+   <div class="chip" style="color:#D0FAFF">냐루</div>
+   <div class="card pad" style="margin-bottom:16px">
+    <div class="chk sm"><span class="box"></span>냐루네 공지</div>
+    <div class="rowsep"></div>
+    <div class="chk sm"><span class="box"></span>냐묄 놀이터</div>
+    <div class="rowsep"></div>
+    <div class="chk sm"><span class="box"></span>선물 수여식</div>
+   </div>
+   <div class="chip" style="color:#FDF3EA">청예솔</div>
+   <div class="card pad" style="margin-bottom:16px">
+    <div class="chk sm"><span class="box"></span>예소리 이야기</div>
+    <div class="rowsep"></div>
+    <div class="chk sm"><span class="box"></span>이야기 주머니</div>
+   </div>
+  </div>
+ </div>
+</div>
+
+<!-- ============ 4. 새 글 알림 ============ -->
+<div class="col">
+ <div class="cap">새 글 알림</div>
+ <div class="phone dark">
+  <div class="shade">
+   <div class="sysbar">11:52<div class="ic">
+    <div class="sig"><s></s><s></s><s></s><s></s></div><div class="wifi"></div><div class="bat"></div>
+   </div></div>
+   <div class="when">8월 12일 화요일 · 오전 11:52</div>
+   <div class="noti">
+    <div class="app"><span class="dot"></span>일루전 라이브 알리미<span class="num">3</span></div>
+    <h3>새 글 3개</h3>
+    <div class="sub">수염이 말대로 로또사니까 외 2개</div>
+    <div class="lines">
+     <div>수염이 말대로 로또사니까</div>
+     <div>노래추천-지금까지 노력했던 너를 사랑해</div>
+     <div>김범수가 애니OST 월드컵 했는데</div>
+    </div>
+   </div>
+   <div class="noti">
+    <div class="app"><span class="dot"></span>일루전 라이브 알리미</div>
+    <h3>영화 보고 오기</h3>
+    <div class="sub">community_nyaru · 노쉬</div>
+   </div>
+   <div class="noti">
+    <div class="app"><span class="dot"></span>일루전 라이브 알리미</div>
+    <h3>~8월 11일 방종 일기~</h3>
+    <div class="sub">124 · 위즐리어카</div>
+   </div>
+   <div class="noti">
+    <div class="app"><span class="dot"></span>일루전 라이브 알리미</div>
+    <h3>의외로 동물계 주량 원탑 생물</h3>
+    <div class="sub">sohee2 · 9948</div>
+   </div>
+   <div class="noti">
+    <div class="app"><span class="dot"></span>일루전 라이브 알리미</div>
+    <h3>왕크왕귀</h3>
+    <div class="sub">comet_004 · 그란드림</div>
+   </div>
+  </div>
+ </div>
+</div>

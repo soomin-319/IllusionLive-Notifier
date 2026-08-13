@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="AppTheme" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">sans-serif</item>
+        <!-- illusionlive.com brand #353958, link tone #757DBD -->
+        <item name="android:colorAccent">#757DBD</item>
+        <item name="android:colorPrimary">#353958</item>
+        <item name="android:statusBarColor">#222438</item>
+        <item name="android:navigationBarColor">#F4F5F9</item>
+        <item name="android:windowBackground">#F4F5F9</item>
+        <!-- API 27+; silently ignored on API 26 -->
+        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:windowActionModeOverlay">true</item>
+    </style>
+</resources>
