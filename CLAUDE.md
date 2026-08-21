@@ -45,11 +45,14 @@ PR 생성 전 확인:
 ```powershell
 ./build-android.ps1
 $dl = Join-Path $env:USERPROFILE 'Downloads'
-Compress-Archive -Path 'android-dist\*' -DestinationPath (Join-Path $dl 'IllusionLiveNotifier-android.zip') -CompressionLevel Optimal -Force
+$ver = (Select-String -Path build-android.ps1 -Pattern '--version-name\s+(\S+)').Matches[0].Groups[1].Value
+Compress-Archive -Path 'android-dist\*' -DestinationPath (Join-Path $dl "IllusionLiveNotifier-android-v$ver.zip") -CompressionLevel Optimal -Force
 ```
 
-- 저장 이름: `IllusionLiveNotifier-android.zip` (Windows 빌드는 `IllusionLiveNotifier-win-x64.zip`)
-- 기존 파일이 있으면 덮어쓴다 (`-Force`)
+- 저장 이름 뒤에 버전 번호를 붙인다: `IllusionLiveNotifier-android-v<버전>.zip` (예: `IllusionLiveNotifier-android-v1.0.5.zip`)
+- 버전은 `build-android.ps1` 의 `--version-name` 값을 그대로 쓴다 (하드코딩 금지)
+- Windows 빌드도 동일: `IllusionLiveNotifier-win-x64-v<버전>.zip`
+- 같은 버전 파일이 있으면 덮어쓴다 (`-Force`)
 - 저장 후 zip 경로와 SHA256 해시를 사용자에게 알린다
 
 ## 참고
