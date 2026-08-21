@@ -35,9 +35,15 @@ final class FeedChecker {
     static final String KEY_DARK = "dark_mode";
     static final String KEY_TUTORIAL_SEEN = "tutorial_seen";
     static final String KEY_CACHED_POSTS = "cached_posts";
-    // Keep this well above a minute: every install polls the site directly, so a short period
-    // multiplies into sustained traffic on someone else's server as the user count grows.
-    static final int POLL_MINUTES = 10;
+    // One minute is the floor: allow-while-idle alarms are rate limited to one per minute while
+    // the device is awake, and Doze stretches that to roughly one per 9 minutes anyway, so the
+    // screen-off period does not change with this value.
+    //
+    // Every install polls the site directly and the feed cannot be cached: the response carries no
+    // Last-Modified, ETag or Cache-Control, and sending If-Modified-Since still returns a full 200
+    // rather than a 304 (measured 2026-08-21). Each check therefore costs the site a fresh render,
+    // about 4 KB gzipped. Roughly 370 requests per user per day at this period.
+    static final int POLL_MINUTES = 1;
 
     private static final int MAX_CACHED_POSTS = 200;
     private static final String CHANNEL_ID = "new_posts";
