@@ -20,8 +20,9 @@ public final class FeedAlarmReceiver extends BroadcastReceiver {
         PendingIntent pending = pendingCheck(app);
         alarms.cancel(pending);
         if (!FeedChecker.backgroundEnabled(app)) return;
-        // setAndAllowWhileIdle avoids the SCHEDULE_EXACT_ALARM permission. Doze throttles it to
-        // roughly one fire per 9 minutes, which no longer binds at the 10 minute poll period.
+        // ponytail: setAndAllowWhileIdle avoids the SCHEDULE_EXACT_ALARM permission, but Doze
+        // throttles it to roughly one fire per 9 minutes, so 5 minutes is the screen-on period
+        // only. Move to a foreground service if 5 minutes has to hold while the screen is off.
         alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,
                 System.currentTimeMillis() + FeedChecker.POLL_MINUTES * 60_000L, pending);
     }

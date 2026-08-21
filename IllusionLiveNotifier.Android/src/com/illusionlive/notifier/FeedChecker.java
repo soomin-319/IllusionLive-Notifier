@@ -35,9 +35,10 @@ final class FeedChecker {
     static final String KEY_DARK = "dark_mode";
     static final String KEY_TUTORIAL_SEEN = "tutorial_seen";
     static final String KEY_CACHED_POSTS = "cached_posts";
-    // Keep this well above a minute: every install polls the site directly, so a short period
-    // multiplies into sustained traffic on someone else's server as the user count grows.
-    static final int POLL_MINUTES = 10;
+    // Every install polls the site directly, so this period multiplies into sustained traffic on
+    // someone else's server as the user count grows. Do not shorten it further without sending a
+    // conditional request (If-Modified-Since) so the server can answer 304.
+    static final int POLL_MINUTES = 5;
 
     private static final int MAX_CACHED_POSTS = 200;
     private static final String CHANNEL_ID = "new_posts";
