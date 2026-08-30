@@ -3,6 +3,7 @@ package com.illusionlive.notifier;
 import android.Manifest;
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
+import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
@@ -18,6 +19,8 @@ import android.graphics.drawable.RippleDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.PowerManager;
+import android.provider.Settings;
 import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.MotionEvent;
@@ -97,6 +100,7 @@ public final class MainActivity extends Activity {
     private View recentView;
     private ImageButton settingsButton;
     private ProgressBar progress;
+    private TextView batteryRow;
     private boolean settingsShown;
     private boolean refreshing;
     private OnBackInvokedCallback backCallback;
@@ -111,9 +115,15 @@ public final class MainActivity extends Activity {
         else showRecent();
         adapter.setPosts(FeedChecker.cachedPosts(this));
         FeedAlarmReceiver.sync(this);
-        requestNotificationPermission();
+        if (!requestNotificationPermission()) maybeAskBatteryExemption();
         checkNow();
         maybeShowTutorial();
+    }
+
+    /** The exemption can be granted or revoked in system settings while the app is away. */
+    @Override protected void onResume() {
+        super.onResume();
+        bindBatteryRow();
     }
 
     /** Survives the recreate() a dark-mode toggle triggers, so the toggle stays on screen. */
@@ -355,12 +365,21 @@ public final class MainActivity extends Activity {
                     }
                 }), new LinearLayout.LayoutParams(-1, -2));
 
-        TextView guide = text("앱이 닫혀 있어도 새 글을 자동으로 확인합니다. "
-                + "Android 절전 상태에서는 알림이 조금 늦어질 수 있습니다.", 13);
+        TextView guide = text("앱이 닫혀 있어도 새 글을 자동으로 확인합니다.", 13);
         guide.setTextColor(MUTED);
         LinearLayout.LayoutParams guideParams = new LinearLayout.LayoutParams(-1, -2);
         guideParams.setMargins(0, dp(6), 0, 0);
         backgroundCard.addView(guide, guideParams);
+
+        batteryRow = text("", 13);
+        batteryRow.setPadding(dp(12), dp(10), dp(12), dp(11));
+        batteryRow.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View view) { requestBatteryExemption(); }
+        });
+        LinearLayout.LayoutParams batteryParams = new LinearLayout.LayoutParams(-1, -2);
+        batteryParams.setMargins(0, dp(12), 0, 0);
+        backgroundCard.addView(batteryRow, batteryParams);
+        bindBatteryRow();
         pane.addView(backgroundCard, matchWrap(dp(18)));
 
         pane.addView(sectionTitle("게시판별 알림"), matchWrap(dp(4)));
@@ -580,17 +599,71 @@ public final class MainActivity extends Activity {
         }
     }
 
-    private void requestNotificationPermission() {
-        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
-                != PackageManager.PERMISSION_GRANTED)
-            requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, NOTIFICATION_PERMISSION_REQUEST);
+    /** @return true when a dialog was raised, so the caller can wait its turn behind it. */
+    private boolean requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT < 33 || checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+                == PackageManager.PERMISSION_GRANTED) return false;
+        requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, NOTIFICATION_PERMISSION_REQUEST);
+        return true;
+    }
+
+    // ----------------------------------------------------- battery exemption
+
+    /**
+     * Doze holds the background alarm to roughly one fire per 9 minutes, which is what makes
+     * new post notifications arrive late or not at all. This exemption lifts that clamp. It is
+     * not a fix for the OEM app killers (Samsung sleeping apps, MIUI autostart) - those stay a
+     * manual setting.
+     */
+    private boolean batteryExempt() {
+        PowerManager power = (PowerManager) getSystemService(Context.POWER_SERVICE);
+        return power != null && power.isIgnoringBatteryOptimizations(getPackageName());
+    }
+
+    /** One unprompted ask, and only once the tutorial is done, so a first launch stays calm. */
+    private void maybeAskBatteryExemption() {
+        SharedPreferences preferences = FeedChecker.prefs(this);
+        if (preferences.getBoolean(FeedChecker.KEY_BATTERY_ASKED, false)) return;
+        if (!preferences.getBoolean(FeedChecker.KEY_TUTORIAL_SEEN, false)) return;
+        if (!FeedChecker.backgroundEnabled(this) || batteryExempt()) return;
+        preferences.edit().putBoolean(FeedChecker.KEY_BATTERY_ASKED, true).commit();
+        requestBatteryExemption();
+    }
+
+    private void requestBatteryExemption() {
+        if (batteryExempt()) return;
+        try {
+            startActivity(new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                    Uri.parse("package:" + getPackageName())));
+        } catch (RuntimeException error) {
+            // Some ROMs drop the per-app dialog; the full optimization list is always there.
+            try {
+                startActivity(new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));
+            } catch (RuntimeException ignored) {
+                toast("절전 예외 설정을 열 수 없습니다.");
+            }
+        }
+    }
+
+    /** States the live setting, and is a button only while the exemption is still missing. */
+    private void bindBatteryRow() {
+        if (batteryRow == null) return;
+        boolean exempt = batteryExempt();
+        batteryRow.setText(exempt
+                ? "절전 예외 허용됨 · 새 글을 제때 알립니다."
+                : "절전 예외 허용하기 · 지금은 알림이 최대 9분 늦습니다.");
+        batteryRow.setTextColor(exempt ? MUTED : BRAND);
+        batteryRow.setTypeface(exempt ? Typeface.DEFAULT : Typeface.DEFAULT_BOLD);
+        batteryRow.setBackground(exempt ? rounded(CHIP, 10, 0) : ripple(CHIP, 10, BRAND));
+        batteryRow.setClickable(!exempt);
     }
 
     @Override public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
         super.onRequestPermissionsResult(requestCode, permissions, results);
-        if (requestCode == NOTIFICATION_PERMISSION_REQUEST &&
-                (results.length == 0 || results[0] != PackageManager.PERMISSION_GRANTED))
+        if (requestCode != NOTIFICATION_PERMISSION_REQUEST) return;
+        if (results.length == 0 || results[0] != PackageManager.PERMISSION_GRANTED)
             toast("알림 권한을 허용해야 새 글 알림이 표시됩니다.");
+        maybeAskBatteryExemption(); // queued behind the dialog the user just answered
     }
 
     // --------------------------------------------------------------- drawing
