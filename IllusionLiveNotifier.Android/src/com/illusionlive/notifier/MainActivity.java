@@ -18,6 +18,7 @@ import android.graphics.drawable.RippleDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.SystemClock;
 import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.MotionEvent;
@@ -68,7 +69,10 @@ public final class MainActivity extends Activity {
     private static int CHIP = 0xFFE9EAF3;
     static int ON_BRAND = 0xFFFFFFFF;
     private static final int ON_BRAND_SOFT = 0x33FFFFFF;
-    private static final int PULL_DP = 72;
+    private static final int PULL_DP = 40;
+    private static final int SPINNER_DP = 40;
+    /** A cached feed answers in a few ms; hold the spinner this long so the refresh is visible. */
+    private static final int SPINNER_MIN_MS = 500;
     private static final String STATE_SETTINGS_SHOWN = "settings_shown";
 
     private static final String[] BOARD_DATA = {
@@ -253,12 +257,16 @@ public final class MainActivity extends Activity {
         listHolder.addView(list, new FrameLayout.LayoutParams(-1, -1));
         listHolder.addView(empty, new FrameLayout.LayoutParams(-1, -1));
 
+        // A bare spinner disappears into the list rows, so it sits on a raised surface disc.
         progress = new ProgressBar(this);
         progress.setIndeterminateTintList(ColorStateList.valueOf(ACCENT));
+        progress.setBackground(rounded(SURFACE, SPINNER_DP / 2, LINE));
+        progress.setPadding(dp(8), dp(8), dp(8), dp(8));
+        progress.setElevation(dp(6));
         progress.setVisibility(View.GONE);
-        FrameLayout.LayoutParams progressParams =
-                new FrameLayout.LayoutParams(dp(28), dp(28), Gravity.TOP | Gravity.CENTER_HORIZONTAL);
-        progressParams.topMargin = dp(12);
+        FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(
+                dp(SPINNER_DP), dp(SPINNER_DP), Gravity.TOP | Gravity.CENTER_HORIZONTAL);
+        progressParams.topMargin = dp(16);
         listHolder.addView(progress, progressParams);
 
         pane.addView(listHolder, new LinearLayout.LayoutParams(-1, -1));
@@ -544,9 +552,11 @@ public final class MainActivity extends Activity {
         if (refreshing) return;
         refreshing = true;
         progress.setVisibility(View.VISIBLE);
+        final long shownAt = SystemClock.uptimeMillis();
         FeedChecker.check(this, true, new FeedChecker.Listener() {
             @Override public void onComplete(final FeedChecker.Result result) {
-                runOnUiThread(new Runnable() {
+                // postDelayed already hops to the UI thread, so no runOnUiThread wrapper is needed.
+                progress.postDelayed(new Runnable() {
                     @Override public void run() {
                         if (isFinishing() || isDestroyed()) return;
                         refreshing = false;
@@ -559,7 +569,7 @@ public final class MainActivity extends Activity {
                             adapter.setPosts(result.posts);
                         }
                     }
-                });
+                }, Math.max(0L, SPINNER_MIN_MS - (SystemClock.uptimeMillis() - shownAt)));
             }
         });
     }
