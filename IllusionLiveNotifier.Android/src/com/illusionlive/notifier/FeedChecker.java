@@ -34,6 +34,7 @@ final class FeedChecker {
     static final String KEY_DYNAMIC_BOARDS = "dynamic_boards";
     static final String KEY_DARK = "dark_mode";
     static final String KEY_TUTORIAL_SEEN = "tutorial_seen";
+    static final String KEY_BATTERY_ASKED = "battery_exemption_asked";
     static final String KEY_CACHED_POSTS = "cached_posts";
     // One minute is the floor: allow-while-idle alarms are rate limited to one per minute while
     // the device is awake, and Doze stretches that to roughly one per 9 minutes anyway, so the
