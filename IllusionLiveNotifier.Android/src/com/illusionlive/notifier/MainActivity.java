@@ -68,7 +68,7 @@ public final class MainActivity extends Activity {
     private static int CHIP = 0xFFE9EAF3;
     static int ON_BRAND = 0xFFFFFFFF;
     private static final int ON_BRAND_SOFT = 0x33FFFFFF;
-    private static final int PULL_DP = 72;
+    private static final int PULL_DP = 40;
     private static final String STATE_SETTINGS_SHOWN = "settings_shown";
 
     private static final String[] BOARD_DATA = {
