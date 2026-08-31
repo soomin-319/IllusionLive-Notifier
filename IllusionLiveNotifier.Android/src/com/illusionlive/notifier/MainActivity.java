@@ -72,6 +72,11 @@ public final class MainActivity extends Activity {
     static int ON_BRAND = 0xFFFFFFFF;
     private static final int ON_BRAND_SOFT = 0x33FFFFFF;
     private static final int PULL_DP = 72;
+
+    // Pull-to-refresh spinner: light blue, 1.5x the old 28dp, drops from the top to the middle.
+    private static final int SPINNER = 0xFF7EC4F0;
+    private static final int SPINNER_DP = 42;
+    private static final int SPINNER_DROP_MS = 420;
     private static final String STATE_SETTINGS_SHOWN = "settings_shown";
 
     private static final String[] BOARD_DATA = {
@@ -264,11 +269,10 @@ public final class MainActivity extends Activity {
         listHolder.addView(empty, new FrameLayout.LayoutParams(-1, -1));
 
         progress = new ProgressBar(this);
-        progress.setIndeterminateTintList(ColorStateList.valueOf(ACCENT));
+        progress.setIndeterminateTintList(ColorStateList.valueOf(SPINNER));
         progress.setVisibility(View.GONE);
-        FrameLayout.LayoutParams progressParams =
-                new FrameLayout.LayoutParams(dp(28), dp(28), Gravity.TOP | Gravity.CENTER_HORIZONTAL);
-        progressParams.topMargin = dp(12);
+        FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(
+                dp(SPINNER_DP), dp(SPINNER_DP), Gravity.TOP | Gravity.CENTER_HORIZONTAL);
         listHolder.addView(progress, progressParams);
 
         pane.addView(listHolder, new LinearLayout.LayoutParams(-1, -1));
@@ -563,12 +567,14 @@ public final class MainActivity extends Activity {
         if (refreshing) return;
         refreshing = true;
         progress.setVisibility(View.VISIBLE);
+        dropSpinner();
         FeedChecker.check(this, true, new FeedChecker.Listener() {
             @Override public void onComplete(final FeedChecker.Result result) {
                 runOnUiThread(new Runnable() {
                     @Override public void run() {
                         if (isFinishing() || isDestroyed()) return;
                         refreshing = false;
+                        progress.animate().cancel();
                         progress.setVisibility(View.GONE);
                         if (result.busy) return;
                         if (result.error != null) {
@@ -581,6 +587,17 @@ public final class MainActivity extends Activity {
                 });
             }
         });
+    }
+
+    /** Slides the spinner in from just above the list and settles it in the middle. */
+    private void dropSpinner() {
+        View holder = (View) progress.getParent();
+        progress.animate().cancel();
+        progress.setTranslationY(-dp(SPINNER_DP));
+        progress.animate()
+                .translationY(Math.max(0f, (holder.getHeight() - dp(SPINNER_DP)) / 2f))
+                .setDuration(SPINNER_DROP_MS)
+                .start();
     }
 
     @Override @SuppressWarnings("deprecation") public void onBackPressed() {
