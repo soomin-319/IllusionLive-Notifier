@@ -2,13 +2,14 @@
 <resources>
     <style name="AppTheme" parent="android:style/Theme.Material.Light.NoActionBar">
         <item name="android:fontFamily">sans-serif</item>
-        <!-- illusionlive.com brand #353958, link tone #757DBD; the shell itself is white -->
+        <!-- illusionlive.com brand #353958 fills the header band; the shell below it is white -->
         <item name="android:colorAccent">#757DBD</item>
         <item name="android:colorPrimary">#353958</item>
-        <item name="android:statusBarColor">#EDE9FB</item>
+        <item name="android:statusBarColor">#353958</item>
         <item name="android:navigationBarColor">#FFFFFF</item>
         <item name="android:windowBackground">#FFFFFF</item>
-        <item name="android:windowLightStatusBar">true</item>
+        <!-- the status bar sits on the navy band, so its icons stay light -->
+        <item name="android:windowLightStatusBar">false</item>
         <!-- API 27+; silently ignored on API 26 -->
         <item name="android:windowLightNavigationBar">true</item>
         <item name="android:windowActionModeOverlay">true</item>

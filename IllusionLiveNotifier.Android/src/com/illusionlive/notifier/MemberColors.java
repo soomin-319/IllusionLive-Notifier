@@ -57,6 +57,18 @@ final class MemberColors {
         return ink;
     }
 
+    /**
+     * Ink for text laid on a member's colour at full strength — the settings group header band.
+     * White or the canvas ink, whichever carries further; every member in the table clears 5.7:1
+     * one way or the other, so none of {@link #readableOn}'s walking is needed here. This is why
+     * the band shows the true colour where the old chip could only show a darkened echo of it.
+     */
+    static int inkOn(int fill) {
+        double surface = luminance(fill);
+        return contrast(surface, 1.0) >= contrast(surface, luminance(0xFF15161C))
+                ? 0xFFFFFFFF : 0xFF15161C;
+    }
+
     private static void put(String group, int... colors) {
         TABLE.put(group, colors);
     }
