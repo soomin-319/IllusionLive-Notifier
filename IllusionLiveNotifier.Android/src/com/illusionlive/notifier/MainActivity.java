@@ -9,8 +9,16 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
 import android.content.res.Configuration;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.ColorFilter;
 import android.graphics.Insets;
+import android.graphics.Matrix;
+import android.graphics.Paint;
+import android.graphics.PixelFormat;
+import android.graphics.Rect;
+import android.graphics.RectF;
+import android.graphics.SweepGradient;
 import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
@@ -84,11 +92,13 @@ public final class MainActivity extends Activity {
     static int ON_BRAND = 0xFFFFFFFF;
     private static final int PULL_DP = 72;
 
-    // Pull-to-refresh spinner: the wordmark's cyan end, 1.5x the old 28dp. It follows the drag
-    // from its first pixel, sliding from just above the list down to the middle, and stays there
-    // while the refresh runs. A drag that stops short of PULL_DP takes it back up the way it came.
-    private static final int SPINNER = 0xFF3FBBFE;
+    // Pull-to-refresh spinner: a white ring that fades to nothing around its turn, 1.5x the old
+    // 28dp. It follows the drag from its first pixel, sliding from just above the list down to a
+    // fifth of the way in, and stays there while the refresh runs. A drag that stops short of
+    // PULL_DP takes it back up the way it came.
     private static final int SPINNER_DP = 42;
+    private static final int SPINNER_STROKE_DP = 3;
+    private static final float SPINNER_REST = 0.20f; // of the list's height, measured from its top
     private static final int SPINNER_DROP_MS = 420;
     private static final int SPINNER_LIFT_MS = 200;
     private static final String STATE_SETTINGS_SHOWN = "settings_shown";
@@ -328,7 +338,7 @@ public final class MainActivity extends Activity {
         listHolder.addView(empty, new FrameLayout.LayoutParams(-1, -1));
 
         progress = new ProgressBar(this);
-        progress.setIndeterminateTintList(ColorStateList.valueOf(SPINNER));
+        progress.setIndeterminateDrawable(new SpinnerRing(dp(SPINNER_STROKE_DP)));
         progress.setVisibility(View.GONE);
         FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(
                 dp(SPINNER_DP), dp(SPINNER_DP), Gravity.TOP | Gravity.CENTER_HORIZONTAL);
@@ -377,6 +387,58 @@ public final class MainActivity extends Activity {
             }
             return false; // let the ListView scroll as usual
         }
+    }
+
+    /**
+     * The spinning ring. A tint list can only wash the framework's arc in one flat colour, so the
+     * ring is drawn here instead: a sweep gradient from clear to translucent white, rotated by the
+     * level ProgressBar feeds an indeterminate drawable that is not {@link android.graphics.drawable.Animatable}.
+     * That level runs 0..10000 over one animation cycle, so three turns' worth of rotation per
+     * cycle keeps the pace near the framework spinner's.
+     */
+    private static final class SpinnerRing extends Drawable {
+        private static final int[] SWEEP = { 0x00FFFFFF, 0x40FFFFFF, 0xCCFFFFFF };
+        private static final float[] STOPS = { 0f, 0.55f, 1f };
+        private static final float TURNS = 3f;
+
+        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final RectF box = new RectF();
+        private final Matrix spin = new Matrix();
+        private SweepGradient sweep;
+
+        SpinnerRing(float strokeWidth) {
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeCap(Paint.Cap.ROUND);
+            paint.setStrokeWidth(strokeWidth);
+        }
+
+        @Override protected void onBoundsChange(Rect bounds) {
+            float inset = paint.getStrokeWidth() / 2f;
+            box.set(bounds.left + inset, bounds.top + inset,
+                    bounds.right - inset, bounds.bottom - inset);
+            if (box.isEmpty()) { sweep = null; paint.setShader(null); return; }
+            sweep = new SweepGradient(box.centerX(), box.centerY(), SWEEP, STOPS);
+            paint.setShader(sweep);
+        }
+
+        @Override public void draw(Canvas canvas) {
+            if (sweep == null) return;
+            spin.setRotate(getLevel() * TURNS * 360f / 10000f, box.centerX(), box.centerY());
+            sweep.setLocalMatrix(spin);
+            canvas.drawArc(box, 0f, 360f, false, paint);
+        }
+
+        @Override protected boolean onLevelChange(int level) {
+            invalidateSelf();
+            return true;
+        }
+
+        @Override public void setAlpha(int alpha) { paint.setAlpha(alpha); }
+
+        @Override public void setColorFilter(ColorFilter filter) { paint.setColorFilter(filter); }
+
+        @Override @SuppressWarnings("deprecation") // Drawable still declares it abstract
+        public int getOpacity() { return PixelFormat.TRANSLUCENT; }
     }
 
     private void showRecent() {
@@ -660,14 +722,15 @@ public final class MainActivity extends Activity {
         });
     }
 
-    /** Where the spinner comes to rest: the middle of the list. */
+    /** Where the spinner comes to rest: centred a fifth of the way down the list. */
     private float spinnerRest() {
-        return Math.max(0f, (((View) progress.getParent()).getHeight() - dp(SPINNER_DP)) / 2f);
+        float parent = ((View) progress.getParent()).getHeight();
+        return Math.max(0f, parent * SPINNER_REST - dp(SPINNER_DP) / 2f);
     }
 
     /**
-     * Puts the spinner somewhere along its drop: 0 leaves it just above the list, 1 settles it in
-     * the middle. Anything past 1 is overpull and holds — the drag is already long enough to fire.
+     * Puts the spinner somewhere along its drop: 0 leaves it just above the list, 1 settles it at
+     * its rest point. Anything past 1 is overpull and holds — the drag is already long enough.
      */
     private void moveSpinner(float fraction) {
         float travel = Math.max(0f, Math.min(1f, fraction));
@@ -680,8 +743,8 @@ public final class MainActivity extends Activity {
     /** Runs the drop by itself for a refresh no drag asked for — the load on first launch. */
     private void dropSpinner() {
         if (((View) progress.getParent()).getHeight() == 0) {
-            // Nothing is laid out yet on first launch, so there is no middle to aim at. Retry once
-            // the first pass lands; the refresh flag ends the retry if the check finishes first.
+            // Nothing is laid out yet on first launch, so there is no rest point to aim at. Retry
+            // once the first pass lands; the refresh flag ends it if the check finishes first.
             progress.post(() -> { if (refreshing) dropSpinner(); });
             return;
         }
