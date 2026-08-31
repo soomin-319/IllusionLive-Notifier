@@ -16,7 +16,6 @@
 - 최근 글 목록 및 원문 열기
 - 다크 모드 (기본값은 시스템 설정을 따름)
 - 게시판별 알림 켜기/끄기
-- 제목·작성자 키워드 필터 (쉼표로 OR)
 - 앱을 닫아도 백그라운드에서 새 글 자동 확인
 - 첫 실행 시 기존 글은 알림하지 않고 기준으로만 저장
 - 별도 서버·계정·추적 없음
@@ -30,5 +29,6 @@ APK는 로컬 자체 서명 빌드입니다. Play Store 배포본이 아닙니�
 JDK 17, Android SDK Platform/Build Tools 36 필요.
 
 ```powershell
+$env:ILLUSIONLIVE_KEYSTORE_PASSWORD = '<서명 키 비밀번호>'   # 없으면 키스토어와 함께 새로 만들어집니다
 ./build-android.ps1
 ```

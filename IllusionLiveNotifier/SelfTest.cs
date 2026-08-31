@@ -11,11 +11,13 @@ internal static class SelfTest
                 <rss version="2.0"><channel>
                   <item><title>공지 &amp; 일정</title><link>https://www.illusionlive.com/chung02/?idx=123&amp;bmode=view</link><guid>post-123</guid><author>청예솔</author><pubDate>Tue, 11 Aug 2026 10:53:35 +0900</pubDate></item>
                   <item><title>상품</title><link>https://www.illusionlive.com/STORE/?idx=41</link><guid>product-41</guid><pubDate>Tue, 11 Aug 2026 09:00:00 +0900</pubDate></item>
+                  <item><title>낚시</title><link>https://illusionlive.evil.example/chung02/?idx=9&amp;bmode=view</link><guid>evil-9</guid><pubDate>Tue, 11 Aug 2026 09:00:00 +0900</pubDate></item>
+                  <item><title>평문</title><link>http://www.illusionlive.com/chung02/?idx=10&amp;bmode=view</link><guid>plain-10</guid><pubDate>Tue, 11 Aug 2026 09:00:00 +0900</pubDate></item>
                 </channel></rss>
                 """;
 
             var posts = RssFeedClient.Parse(xml);
-            Assert(posts.Count == 1, "상품 항목 제외");
+            Assert(posts.Count == 1, "상품·외부 호스트·평문 http 항목 제외");
             Assert(posts[0].Id == "post-123" && posts[0].BoardSlug == "chung02", "글 식별");
             Assert(posts[0].Title == "공지 & 일정", "XML 엔터티 해제");
 

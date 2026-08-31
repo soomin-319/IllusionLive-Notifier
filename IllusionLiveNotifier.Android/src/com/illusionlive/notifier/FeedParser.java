@@ -53,11 +53,13 @@ final class FeedParser {
     }
 
     static List<Post> parse(byte[] xml) throws Exception {
-        String ascii = new String(xml, StandardCharsets.ISO_8859_1).toUpperCase(Locale.ROOT);
-        if (ascii.contains("<!DOCTYPE")) throw new IllegalArgumentException("DOCTYPE is not allowed");
+        if (hasDoctype(xml)) throw new IllegalArgumentException("DOCTYPE is not allowed");
 
         DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
         factory.setExpandEntityReferences(false);
+        // Android's DocumentBuilderFactory throws on every one of these names, so they harden the
+        // desktop JAXP parser the self-test runs on and nothing else. hasDoctype() above is the
+        // defence that actually holds on the device — keep it working on its own.
         setFeature(factory, "http://apache.org/xml/features/disallow-doctype-decl", true);
         setFeature(factory, "http://xml.org/sax/features/external-general-entities", false);
         setFeature(factory, "http://xml.org/sax/features/external-parameter-entities", false);
@@ -167,6 +169,15 @@ final class FeedParser {
             } catch (Exception ignored) {}
         }
         return 0;
+    }
+
+    /**
+     * Byte scan rather than a decode: the declared encoding cannot be trusted before parsing, and
+     * dropping NUL bytes first makes the UTF-16 spelling of the same declaration match too.
+     */
+    static boolean hasDoctype(byte[] xml) {
+        String text = new String(xml, StandardCharsets.ISO_8859_1).replace("\0", "");
+        return text.toUpperCase(Locale.ROOT).contains("<!DOCTYPE");
     }
 
     private static void setFeature(DocumentBuilderFactory factory, String name, boolean value) {

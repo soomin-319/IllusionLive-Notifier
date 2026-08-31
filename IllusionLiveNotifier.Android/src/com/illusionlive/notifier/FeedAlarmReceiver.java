@@ -22,7 +22,7 @@ public final class FeedAlarmReceiver extends BroadcastReceiver {
         if (!FeedChecker.backgroundEnabled(app)) return;
         // ponytail: setAndAllowWhileIdle avoids the SCHEDULE_EXACT_ALARM permission, but it is
         // inexact and rate limited — about one fire per minute while awake, one per 9 minutes in
-        // Doze. The one minute period therefore holds only with the screen on. Move to a
+        // Doze. POLL_MINUTES therefore holds only with the screen on. Move to a
         // foreground service if it has to hold while the screen is off.
         alarms.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP,
                 System.currentTimeMillis() + FeedChecker.POLL_MINUTES * 60_000L, pending);
