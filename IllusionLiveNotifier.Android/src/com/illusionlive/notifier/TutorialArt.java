@@ -46,14 +46,17 @@ final class TutorialArt extends View {
         float right = left + phoneW;
         float headerH = h * 0.17f;
 
-        // phone shell: body first, then the header band clipped back to the rounded top
+        // phone shell: body first, then the header band clipped back to the rounded top. The band
+        // is the same white as the body, so the hairline under it is what makes it a header.
         roundRect(canvas, left, 0f, right, h, h * 0.08f, MainActivity.CANVAS, MainActivity.LINE);
         canvas.save();
         canvas.clipRect(left, 0f, right, headerH);
-        roundRect(canvas, left, 0f, right, h, h * 0.08f, MainActivity.BRAND, 0);
+        roundRect(canvas, left, 0f, right, h, h * 0.08f, MainActivity.SURFACE, 0);
         canvas.restore();
+        stroke.setColor(MainActivity.LINE);
+        canvas.drawLine(left, headerH, right, headerH, stroke);
         roundRect(canvas, left + phoneW * 0.09f, headerH * 0.39f, left + phoneW * 0.5f,
-                headerH * 0.63f, headerH * 0.12f, alpha(MainActivity.ON_BRAND, 0xCC), 0);
+                headerH * 0.63f, headerH * 0.12f, alpha(MainActivity.INK, 0xCC), 0);
         gear(canvas, right - phoneW * 0.16f, headerH * 0.51f, headerH * 0.2f, step == 0);
 
         float rowLeft = left + phoneW * 0.09f;
@@ -154,9 +157,9 @@ final class TutorialArt extends View {
             stroke.setColor(MainActivity.ACCENT);
             canvas.drawCircle(cx, cy, radius * 2.1f, stroke);
         }
-        stroke.setColor(MainActivity.ON_BRAND);
+        stroke.setColor(MainActivity.INK);
         canvas.drawCircle(cx, cy, radius, stroke);
-        fill.setColor(MainActivity.ON_BRAND);
+        fill.setColor(MainActivity.INK);
         canvas.drawCircle(cx, cy, radius * 0.34f, fill);
         for (int i = 0; i < 4; i++) {
             double angle = Math.PI * i / 4.0;
