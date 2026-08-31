@@ -46,9 +46,10 @@ PR 생성 전 확인:
 ./build-android.ps1
 $dl = Join-Path $env:USERPROFILE 'Downloads'
 $ver = (Select-String -Path build-android.ps1 -Pattern '--version-name\s+(\S+)').Matches[0].Groups[1].Value
-Compress-Archive -Path 'android-dist\*' -DestinationPath (Join-Path $dl "IllusionLiveNotifier-android-v$ver.zip") -CompressionLevel Optimal -Force
+Compress-Archive -Path 'android-dist\IllusionLiveNotifier.apk' -DestinationPath (Join-Path $dl "IllusionLiveNotifier-android-v$ver.zip") -CompressionLevel Optimal -Force
 ```
 
+- zip 안에는 APK 파일만 넣는다 (README, 중간 zip 등 다른 산출물 제외)
 - 저장 이름 뒤에 버전 번호를 붙인다: `IllusionLiveNotifier-android-v<버전>.zip` (예: `IllusionLiveNotifier-android-v1.0.5.zip`)
 - 버전은 `build-android.ps1` 의 `--version-name` 값을 그대로 쓴다 (하드코딩 금지)
 - Windows 빌드도 동일: `IllusionLiveNotifier-win-x64-v<버전>.zip`
