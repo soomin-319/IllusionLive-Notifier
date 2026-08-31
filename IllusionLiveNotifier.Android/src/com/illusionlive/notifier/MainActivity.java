@@ -63,6 +63,10 @@ public final class MainActivity extends Activity {
     static int BRAND = 0xFF353958;
     static int ACCENT = 0xFF757DBD;
     static int CANVAS = 0xFFFFFFFF;
+    // The ground is white, washed with a little brand light at the top that fades out by the
+    // middle of the screen. The cards stay flat white, so the wash is what they sit on.
+    private static int WASH_TOP = 0xFFEDE9FB;
+    private static int WASH_MID = 0xFFE9F2FE;
     static int SURFACE = 0xFFFFFFFF;
     static int INK = 0xFF15161C;
     static int MUTED = 0xFF767B8C;
@@ -141,11 +145,15 @@ public final class MainActivity extends Activity {
 
     // ---------------------------------------------------------------- theme
 
-    /** No stored choice means follow the system's night setting. */
+    /**
+     * No stored choice means the opposite of the system's night setting, by request: a phone on
+     * night mode opens the white shell, a phone on day mode opens the dark one. The checkbox in
+     * settings still means what it says and still wins once it has been touched.
+     */
     private boolean darkEnabled() {
         boolean night = (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK)
                 == Configuration.UI_MODE_NIGHT_YES;
-        return FeedChecker.prefs(this).getBoolean(FeedChecker.KEY_DARK, night);
+        return FeedChecker.prefs(this).getBoolean(FeedChecker.KEY_DARK, !night);
     }
 
     /** Same hues as the light theme, pulled down onto a night canvas. */
@@ -154,6 +162,8 @@ public final class MainActivity extends Activity {
         BRAND = dark ? 0xFFA9B0E8 : 0xFF353958;
         ACCENT = dark ? 0xFF8F97D8 : 0xFF757DBD;
         CANVAS = dark ? 0xFF0E0F14 : 0xFFFFFFFF;
+        WASH_TOP = dark ? 0xFF1C1D2C : 0xFFEDE9FB;
+        WASH_MID = dark ? 0xFF14181F : 0xFFE9F2FE;
         SURFACE = dark ? 0xFF16181F : 0xFFFFFFFF;
         INK = dark ? 0xFFECEDF3 : 0xFF15161C;
         MUTED = dark ? 0xFF9195AB : 0xFF767B8C;
@@ -162,9 +172,20 @@ public final class MainActivity extends Activity {
         ON_BRAND = dark ? 0xFF14151E : 0xFFFFFFFF;
 
         // The theme XML only knows the light palette: repaint what it set.
-        getWindow().setBackgroundDrawable(new ColorDrawable(CANVAS));
-        getWindow().setStatusBarColor(SURFACE); // the header runs right up under it
-        getWindow().setNavigationBarColor(CANVAS);
+        getWindow().setBackgroundDrawable(canvasWash());
+        getWindow().setStatusBarColor(WASH_TOP); // the wash runs right up under it
+        getWindow().setNavigationBarColor(CANVAS); // and has faded back to flat by the bottom
+    }
+
+    /**
+     * The screen's ground. A fresh instance per call — one drawable cannot back both the window
+     * and a view — and dithered, because a wash this shallow bands on 8-bit screens without it.
+     */
+    private GradientDrawable canvasWash() {
+        GradientDrawable wash = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{WASH_TOP, WASH_MID, CANVAS});
+        wash.setDither(true);
+        return wash;
     }
 
     @Override public void onAttachedToWindow() {
@@ -198,7 +219,7 @@ public final class MainActivity extends Activity {
     private void buildUi() {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(CANVAS);
+        root.setBackground(canvasWash());
 
         final LinearLayout header = buildHeader();
         root.addView(header, new LinearLayout.LayoutParams(-1, -2));
@@ -234,7 +255,7 @@ public final class MainActivity extends Activity {
         header.setOrientation(LinearLayout.HORIZONTAL);
         header.setGravity(Gravity.CENTER_VERTICAL);
         header.setPadding(dp(18), dp(18), dp(18), dp(14));
-        header.setBackgroundColor(SURFACE);
+        // No background of its own: the wash behind it is the header's colour.
 
         TextView title = text("일루전 라이브 알리미", 21);
         title.setTextColor(INK);
