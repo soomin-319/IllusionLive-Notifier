@@ -56,27 +56,28 @@ public final class MainActivity extends Activity {
     private static final int NOTIFICATION_PERMISSION_REQUEST = 7;
 
     // illusionlive.com palette: #353958 is the site's declared brand colour, #757DBD its link
-    // tone, #212121 its body text. Modern treatment (gradient, large radii, pills) on top.
+    // tone. The shell is white on white — flat surfaces, hairline borders, wide radii, no
+    // coloured chrome — with the brand kept for small accents instead of large fills.
     // Not final: applyTheme() swaps the whole set for the dark one before any view is built.
     // Package-private: TutorialArt paints its mock-ups with the same live palette.
     static int BRAND = 0xFF353958;
-    private static int BRAND_DEEP = 0xFF222438;
-    private static int BRAND_LIGHT = 0xFF5A6096;
     static int ACCENT = 0xFF757DBD;
-    static int CANVAS = 0xFFF4F5F9;
+    static int CANVAS = 0xFFFFFFFF;
     static int SURFACE = 0xFFFFFFFF;
-    static int INK = 0xFF212121;
-    static int MUTED = 0xFF6B6F86;
-    static int LINE = 0xFFE4E6EF;
-    private static int CHIP = 0xFFE9EAF3;
+    static int INK = 0xFF15161C;
+    static int MUTED = 0xFF767B8C;
+    static int LINE = 0xFFEBECF0;
+    private static int CHIP = 0xFFF4F5F8;
     static int ON_BRAND = 0xFFFFFFFF;
-    private static final int ON_BRAND_SOFT = 0x33FFFFFF;
     private static final int PULL_DP = 72;
 
-    // Pull-to-refresh spinner: light blue, 1.5x the old 28dp, drops from the top to the middle.
-    private static final int SPINNER = 0xFF7EC4F0;
+    // Pull-to-refresh spinner: light blue, 1.5x the old 28dp. It follows the drag from its first
+    // pixel, sliding from just above the list down to the middle, and stays there while the
+    // refresh runs. A drag that stops short of PULL_DP takes it back up the way it came.
+    private static final int SPINNER = 0xFF4FA8E0;
     private static final int SPINNER_DP = 42;
     private static final int SPINNER_DROP_MS = 420;
+    private static final int SPINNER_LIFT_MS = 200;
     private static final String STATE_SETTINGS_SHOWN = "settings_shown";
 
     private static final String[] BOARD_DATA = {
@@ -128,6 +129,7 @@ public final class MainActivity extends Activity {
     /** The exemption can be granted or revoked in system settings while the app is away. */
     @Override protected void onResume() {
         super.onResume();
+        applyBarIcons(); // the window recreate() tears down takes the appearance with it
         bindBatteryRow();
     }
 
@@ -147,35 +149,47 @@ public final class MainActivity extends Activity {
     }
 
     /** Same hues as the light theme, pulled down onto a night canvas. */
+    @SuppressWarnings("deprecation") // the bar colours are no-ops on API 35+, which draws edge to edge
     private void applyTheme(boolean dark) {
         BRAND = dark ? 0xFFA9B0E8 : 0xFF353958;
-        BRAND_DEEP = dark ? 0xFF15161F : 0xFF222438;
-        BRAND_LIGHT = dark ? 0xFF3A3F62 : 0xFF5A6096;
         ACCENT = dark ? 0xFF8F97D8 : 0xFF757DBD;
-        CANVAS = dark ? 0xFF101119 : 0xFFF4F5F9;
-        SURFACE = dark ? 0xFF1B1D28 : 0xFFFFFFFF;
-        INK = dark ? 0xFFECEDF3 : 0xFF212121;
-        MUTED = dark ? 0xFF9195AB : 0xFF6B6F86;
-        LINE = dark ? 0xFF2B2E3C : 0xFFE4E6EF;
-        CHIP = dark ? 0xFF262939 : 0xFFE9EAF3;
+        CANVAS = dark ? 0xFF0E0F14 : 0xFFFFFFFF;
+        SURFACE = dark ? 0xFF16181F : 0xFFFFFFFF;
+        INK = dark ? 0xFFECEDF3 : 0xFF15161C;
+        MUTED = dark ? 0xFF9195AB : 0xFF767B8C;
+        LINE = dark ? 0xFF262833 : 0xFFEBECF0;
+        CHIP = dark ? 0xFF212430 : 0xFFF4F5F8;
         ON_BRAND = dark ? 0xFF14151E : 0xFFFFFFFF;
 
         // The theme XML only knows the light palette: repaint what it set.
         getWindow().setBackgroundDrawable(new ColorDrawable(CANVAS));
+        getWindow().setStatusBarColor(SURFACE); // the header runs right up under it
+        getWindow().setNavigationBarColor(CANVAS);
+    }
+
+    @Override public void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        applyBarIcons();
     }
 
     /**
-     * The navigation bar's icon tint, set here rather than in {@link #applyTheme}: the decor view
-     * that owns the insets controller is only built once the window is attached, and asking for it
-     * from onCreate throws.
+     * The system bars' icon tint, set here rather than in {@link #applyTheme}: the decor view that
+     * owns the insets controller is only built once the window is attached, and asking for it from
+     * onCreate throws. Both bars now sit on white, so their icons have to go dark with it — dark
+     * icons on a dark bar is what the dark-mode toggle used to leave behind.
      */
-    @Override public void onAttachedToWindow() {
-        super.onAttachedToWindow();
+    @SuppressWarnings("deprecation") // setSystemUiVisibility is the only route below API 30
+    private void applyBarIcons() {
+        boolean dark = darkEnabled();
         if (Build.VERSION.SDK_INT >= 30) {
+            int light = WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS
+                    | WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
             WindowInsetsController bars = getWindow().getInsetsController();
-            if (bars != null) bars.setSystemBarsAppearance(
-                    darkEnabled() ? 0 : WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS,
-                    WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS);
+            if (bars != null) bars.setSystemBarsAppearance(dark ? 0 : light, light);
+        } else {
+            int light = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
+                    | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+            getWindow().getDecorView().setSystemUiVisibility(dark ? 0 : light);
         }
     }
 
@@ -188,6 +202,12 @@ public final class MainActivity extends Activity {
 
         final LinearLayout header = buildHeader();
         root.addView(header, new LinearLayout.LayoutParams(-1, -2));
+
+        // One pixel, not one dp: the hairline is all that separates a white header from a white
+        // list, and a 3px rule on a 3x screen reads as a border.
+        View hairline = new View(this);
+        hairline.setBackgroundColor(LINE);
+        root.addView(hairline, new LinearLayout.LayoutParams(-1, 1));
 
         content = new FrameLayout(this);
         root.addView(content, new LinearLayout.LayoutParams(-1, 0, 1));
@@ -214,13 +234,12 @@ public final class MainActivity extends Activity {
         header.setOrientation(LinearLayout.HORIZONTAL);
         header.setGravity(Gravity.CENTER_VERTICAL);
         header.setPadding(dp(18), dp(18), dp(18), dp(14));
-        GradientDrawable sky = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
-                new int[]{BRAND_DEEP, BRAND_LIGHT});
-        header.setBackground(sky);
+        header.setBackgroundColor(SURFACE);
 
         TextView title = text("일루전 라이브 알리미", 21);
-        title.setTextColor(Color.WHITE);
+        title.setTextColor(INK);
         title.setTypeface(Typeface.DEFAULT_BOLD);
+        title.setLetterSpacing(-0.02f); // bold display text sets tighter than the default tracking
         header.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
 
         settingsButton = new ImageButton(this);
@@ -238,10 +257,10 @@ public final class MainActivity extends Activity {
         return header;
     }
 
+    /** A grey pill on the white header; filled with the brand while the settings pane is open. */
     private void styleSettingsButton(boolean active) {
-        settingsButton.setBackground(ripple(active ? SURFACE : ON_BRAND_SOFT, 21,
-                active ? BRAND : Color.WHITE));
-        settingsButton.setColorFilter(active ? BRAND : Color.WHITE);
+        settingsButton.setBackground(ripple(active ? BRAND : CHIP, 21, active ? ON_BRAND : BRAND));
+        settingsButton.setColorFilter(active ? ON_BRAND : INK);
     }
 
     // ------------------------------------------------------------ recent tab
@@ -252,7 +271,7 @@ public final class MainActivity extends Activity {
         pane.setPadding(dp(12), dp(12), dp(12), dp(12));
 
         FrameLayout listHolder = new FrameLayout(this);
-        listHolder.setBackground(rounded(SURFACE, 14, LINE));
+        listHolder.setBackground(rounded(SURFACE, 18, LINE));
         listHolder.setClipToOutline(true);
         ListView list = new ListView(this);
         list.setDivider(new ColorDrawable(LINE));
@@ -280,14 +299,16 @@ public final class MainActivity extends Activity {
     }
 
     /**
-     * Pull down at the top of the list to refresh. Plain framework only — SwipeRefreshLayout lives
-     * in androidx and this app has no dependencies.
+     * Pull down at the top of the list to refresh. The spinner tracks the drag the whole way, so
+     * the gesture shows how much further there is to go before it fires. Plain framework only —
+     * SwipeRefreshLayout lives in androidx and this app has no dependencies.
      */
     private final class PullToRefresh implements View.OnTouchListener {
         private float startY = -1f;
         private boolean pulled;
 
         @Override public boolean onTouch(View view, MotionEvent event) {
+            if (refreshing) return false; // a running refresh owns the spinner
             switch (event.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
                     startY = view.canScrollVertically(-1) ? -1f : event.getY();
@@ -295,11 +316,19 @@ public final class MainActivity extends Activity {
                     break;
                 case MotionEvent.ACTION_MOVE:
                     if (startY < 0f && !view.canScrollVertically(-1)) startY = event.getY();
-                    pulled = startY >= 0f && event.getY() - startY > dp(PULL_DP);
+                    if (startY < 0f) break;
+                    float dragged = event.getY() - startY;
+                    if (dragged > 0f) {
+                        progress.animate().cancel(); // a retract may still be on its way up
+                        progress.setVisibility(View.VISIBLE);
+                    }
+                    moveSpinner(dragged / dp(PULL_DP));
+                    pulled = dragged > dp(PULL_DP);
                     break;
                 case MotionEvent.ACTION_UP:
                 case MotionEvent.ACTION_CANCEL:
                     if (pulled && event.getActionMasked() == MotionEvent.ACTION_UP) checkNow();
+                    else retractSpinner();
                     startY = -1f;
                     pulled = false;
                     break;
@@ -566,8 +595,9 @@ public final class MainActivity extends Activity {
     private void checkNow() {
         if (refreshing) return;
         refreshing = true;
+        boolean carried = progress.getVisibility() == View.VISIBLE; // a drag already brought it down
         progress.setVisibility(View.VISIBLE);
-        dropSpinner();
+        if (!carried) dropSpinner();
         FeedChecker.check(this, true, new FeedChecker.Listener() {
             @Override public void onComplete(final FeedChecker.Result result) {
                 runOnUiThread(new Runnable() {
@@ -589,15 +619,43 @@ public final class MainActivity extends Activity {
         });
     }
 
-    /** Slides the spinner in from just above the list and settles it in the middle. */
+    /** Where the spinner comes to rest: the middle of the list. */
+    private float spinnerRest() {
+        return Math.max(0f, (((View) progress.getParent()).getHeight() - dp(SPINNER_DP)) / 2f);
+    }
+
+    /**
+     * Puts the spinner somewhere along its drop: 0 leaves it just above the list, 1 settles it in
+     * the middle. Anything past 1 is overpull and holds — the drag is already long enough to fire.
+     */
+    private void moveSpinner(float fraction) {
+        float travel = Math.max(0f, Math.min(1f, fraction));
+        progress.setTranslationY((spinnerRest() + dp(SPINNER_DP)) * travel - dp(SPINNER_DP));
+        progress.setAlpha(Math.min(1f, 0.3f + travel));
+        progress.setScaleX(0.6f + 0.4f * travel);
+        progress.setScaleY(0.6f + 0.4f * travel);
+    }
+
+    /** Runs the drop by itself for a refresh no drag asked for — the load on first launch. */
     private void dropSpinner() {
-        View holder = (View) progress.getParent();
+        if (((View) progress.getParent()).getHeight() == 0) {
+            // Nothing is laid out yet on first launch, so there is no middle to aim at. Retry once
+            // the first pass lands; the refresh flag ends the retry if the check finishes first.
+            progress.post(() -> { if (refreshing) dropSpinner(); });
+            return;
+        }
         progress.animate().cancel();
-        progress.setTranslationY(-dp(SPINNER_DP));
-        progress.animate()
-                .translationY(Math.max(0f, (holder.getHeight() - dp(SPINNER_DP)) / 2f))
-                .setDuration(SPINNER_DROP_MS)
-                .start();
+        moveSpinner(0f);
+        progress.animate().translationY(spinnerRest()).alpha(1f).scaleX(1f).scaleY(1f)
+                .setDuration(SPINNER_DROP_MS).start();
+    }
+
+    /** The drag stopped short of the threshold: the spinner goes back up the way it came. */
+    private void retractSpinner() {
+        if (progress.getVisibility() != View.VISIBLE) return;
+        progress.animate().cancel();
+        progress.animate().translationY(-dp(SPINNER_DP)).alpha(0f).setDuration(SPINNER_LIFT_MS)
+                .withEndAction(() -> progress.setVisibility(View.GONE)).start();
     }
 
     @Override @SuppressWarnings("deprecation") public void onBackPressed() {
@@ -703,7 +761,7 @@ public final class MainActivity extends Activity {
         LinearLayout view = new LinearLayout(this);
         view.setOrientation(LinearLayout.VERTICAL);
         view.setPadding(dp(16), dp(14), dp(16), dp(16));
-        view.setBackground(rounded(SURFACE, 14, LINE));
+        view.setBackground(rounded(SURFACE, 18, LINE));
         return view;
     }
 
