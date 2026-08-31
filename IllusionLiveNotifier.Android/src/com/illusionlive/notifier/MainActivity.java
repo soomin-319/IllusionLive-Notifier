@@ -31,7 +31,6 @@ import android.view.WindowInsetsController;
 import android.window.OnBackInvokedCallback;
 import android.window.OnBackInvokedDispatcher;
 import android.widget.BaseAdapter;
-import android.widget.CheckBox;
 import android.widget.CompoundButton;
 import android.widget.FrameLayout;
 import android.widget.ImageButton;
@@ -40,6 +39,7 @@ import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
+import android.widget.Switch;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -55,30 +55,39 @@ import java.util.TreeSet;
 public final class MainActivity extends Activity {
     private static final int NOTIFICATION_PERMISSION_REQUEST = 7;
 
-    // illusionlive.com palette: #353958 is the site's declared brand colour, #757DBD its link
-    // tone. The shell is white on white — flat surfaces, hairline borders, wide radii, no
-    // coloured chrome — with the brand kept for small accents instead of large fills.
+    // illusionlive.com, read off the site itself: #353958 is its declared theme-colour and the
+    // fill of its header band, #757DBD its link tone, #212121 its ink — not pure black. The site
+    // squares every corner it draws and keeps 50% only for avatars, so the shell does the same.
     // Not final: applyTheme() swaps the whole set for the dark one before any view is built.
     // Package-private: TutorialArt paints its mock-ups with the same live palette.
     static int BRAND = 0xFF353958;
     static int ACCENT = 0xFF757DBD;
     static int CANVAS = 0xFFFFFFFF;
-    // The ground is white, washed with a little brand light at the top that fades out by the
-    // middle of the screen. The cards stay flat white, so the wash is what they sit on.
-    private static int WASH_TOP = 0xFFEDE9FB;
-    private static int WASH_MID = 0xFFE9F2FE;
+    // The header band, and the ink that sits on it. Fixed across both themes: a navy bar reads on
+    // a white shell and on a night one alike, and it is the one piece of the site people know.
+    private static final int HEADER = 0xFF353958;
+    private static final int ON_HEADER = 0xFFFFFFFF;
+    // The wordmark's own gradient, sampled from the logo: LIVE's violet through ILLUSION's cyan.
+    // Three device pixels of it under the header is the only place the brand gradient appears.
+    private static final int[] WORDMARK = {0xFF994FFF, 0xFF638FFE, 0xFF3FBBFE};
+    // Settings sit a shade below their cards so the white cards have something to sit on; the
+    // feed keeps the flat canvas, because a full-bleed list has no cards to separate.
+    private static int TRAY = 0xFFF7F7F9;
     static int SURFACE = 0xFFFFFFFF;
-    static int INK = 0xFF15161C;
-    static int MUTED = 0xFF767B8C;
-    static int LINE = 0xFFEBECF0;
-    private static int CHIP = 0xFFF4F5F8;
+    static int INK = 0xFF212121;
+    static int MUTED = 0xFF8A8A8A;
+    private static int FAINT = 0xFFA5A5A5; // the timestamp, a step quieter than the rest of the meta
+    static int LINE = 0xFFEFEFEF;
+    private static int CHIP = 0xFFF0F0F3;
+    private static int TRACK = 0xFFD5D5D5; // a switch that is off
+    private static int RING = 0x1A000000; // the hairline that keeps a near-white member dot visible
     static int ON_BRAND = 0xFFFFFFFF;
     private static final int PULL_DP = 72;
 
-    // Pull-to-refresh spinner: light blue, 1.5x the old 28dp. It follows the drag from its first
-    // pixel, sliding from just above the list down to the middle, and stays there while the
-    // refresh runs. A drag that stops short of PULL_DP takes it back up the way it came.
-    private static final int SPINNER = 0xFF4FA8E0;
+    // Pull-to-refresh spinner: the wordmark's cyan end, 1.5x the old 28dp. It follows the drag
+    // from its first pixel, sliding from just above the list down to the middle, and stays there
+    // while the refresh runs. A drag that stops short of PULL_DP takes it back up the way it came.
+    private static final int SPINNER = 0xFF3FBBFE;
     private static final int SPINNER_DP = 42;
     private static final int SPINNER_DROP_MS = 420;
     private static final int SPINNER_LIFT_MS = 200;
@@ -161,31 +170,34 @@ public final class MainActivity extends Activity {
     private void applyTheme(boolean dark) {
         BRAND = dark ? 0xFFA9B0E8 : 0xFF353958;
         ACCENT = dark ? 0xFF8F97D8 : 0xFF757DBD;
-        CANVAS = dark ? 0xFF0E0F14 : 0xFFFFFFFF;
-        WASH_TOP = dark ? 0xFF1C1D2C : 0xFFEDE9FB;
-        WASH_MID = dark ? 0xFF14181F : 0xFFE9F2FE;
-        SURFACE = dark ? 0xFF16181F : 0xFFFFFFFF;
-        INK = dark ? 0xFFECEDF3 : 0xFF15161C;
-        MUTED = dark ? 0xFF9195AB : 0xFF767B8C;
-        LINE = dark ? 0xFF262833 : 0xFFEBECF0;
-        CHIP = dark ? 0xFF212430 : 0xFFF4F5F8;
+        CANVAS = dark ? 0xFF14151A : 0xFFFFFFFF;
+        TRAY = dark ? 0xFF0E0F13 : 0xFFF7F7F9;
+        SURFACE = dark ? 0xFF1B1D24 : 0xFFFFFFFF;
+        INK = dark ? 0xFFECEDF3 : 0xFF212121;
+        MUTED = dark ? 0xFF9195AB : 0xFF8A8A8A;
+        FAINT = dark ? 0xFF6F7488 : 0xFFA5A5A5;
+        LINE = dark ? 0xFF262833 : 0xFFEFEFEF;
+        CHIP = dark ? 0xFF212430 : 0xFFF0F0F3;
+        TRACK = dark ? 0xFF3A3D48 : 0xFFD5D5D5;
+        RING = dark ? 0x22FFFFFF : 0x1A000000;
         ON_BRAND = dark ? 0xFF14151E : 0xFFFFFFFF;
 
         // The theme XML only knows the light palette: repaint what it set.
-        getWindow().setBackgroundDrawable(canvasWash());
-        getWindow().setStatusBarColor(WASH_TOP); // the wash runs right up under it
-        getWindow().setNavigationBarColor(CANVAS); // and has faded back to flat by the bottom
+        getWindow().setBackgroundDrawable(new ColorDrawable(CANVAS));
+        getWindow().setStatusBarColor(HEADER); // the band runs right up under it
+        getWindow().setNavigationBarColor(CANVAS);
     }
 
     /**
-     * The screen's ground. A fresh instance per call — one drawable cannot back both the window
-     * and a view — and dithered, because a wash this shallow bands on 8-bit screens without it.
+     * The three device pixels of wordmark gradient that sit under the header. Left to right, so
+     * it runs violet to cyan the way the logo does, and dithered — a gradient this thin bands on
+     * 8-bit screens without it. A fresh instance per call: one drawable cannot back two views.
      */
-    private GradientDrawable canvasWash() {
-        GradientDrawable wash = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[]{WASH_TOP, WASH_MID, CANVAS});
-        wash.setDither(true);
-        return wash;
+    private GradientDrawable wordmarkRule() {
+        GradientDrawable rule = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT,
+                WORDMARK.clone());
+        rule.setDither(true);
+        return rule;
     }
 
     @Override public void onAttachedToWindow() {
@@ -196,21 +208,23 @@ public final class MainActivity extends Activity {
     /**
      * The system bars' icon tint, set here rather than in {@link #applyTheme}: the decor view that
      * owns the insets controller is only built once the window is attached, and asking for it from
-     * onCreate throws. Both bars now sit on white, so their icons have to go dark with it — dark
-     * icons on a dark bar is what the dark-mode toggle used to leave behind.
+     * onCreate throws. The two bars no longer agree. The status bar sits on the navy header in
+     * both themes, so its icons stay light and the LIGHT_STATUS_BARS bit — which means a light
+     * *background*, and so dark icons — is never set. The navigation bar still sits on the canvas
+     * and follows the theme.
      */
     @SuppressWarnings("deprecation") // setSystemUiVisibility is the only route below API 30
     private void applyBarIcons() {
-        boolean dark = darkEnabled();
+        boolean lightNav = !darkEnabled();
         if (Build.VERSION.SDK_INT >= 30) {
-            int light = WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS
+            int mask = WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS
                     | WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
             WindowInsetsController bars = getWindow().getInsetsController();
-            if (bars != null) bars.setSystemBarsAppearance(dark ? 0 : light, light);
+            if (bars != null) bars.setSystemBarsAppearance(
+                    lightNav ? WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS : 0, mask);
         } else {
-            int light = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
-                    | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
-            getWindow().getDecorView().setSystemUiVisibility(dark ? 0 : light);
+            getWindow().getDecorView().setSystemUiVisibility(
+                    lightNav ? View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR : 0);
         }
     }
 
@@ -219,27 +233,27 @@ public final class MainActivity extends Activity {
     private void buildUi() {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackground(canvasWash());
+        root.setBackgroundColor(CANVAS);
 
         final LinearLayout header = buildHeader();
         root.addView(header, new LinearLayout.LayoutParams(-1, -2));
 
-        // One pixel, not one dp: the hairline is all that separates a white header from a white
-        // list, and a 3px rule on a 3x screen reads as a border.
-        View hairline = new View(this);
-        hairline.setBackgroundColor(LINE);
-        root.addView(hairline, new LinearLayout.LayoutParams(-1, 1));
+        // Three device pixels of the wordmark gradient, not one: this rule is a brand mark rather
+        // than a divider, and at 1px the gradient has nothing to run through.
+        View rule = new View(this);
+        rule.setBackground(wordmarkRule());
+        root.addView(rule, new LinearLayout.LayoutParams(-1, 3));
 
         content = new FrameLayout(this);
         root.addView(content, new LinearLayout.LayoutParams(-1, 0, 1));
 
-        // targetSdk 35+ lays out edge to edge: keep the gradient behind the status bar but push
-        // its text clear of the clock, and lift the list above the navigation bar.
+        // targetSdk 35+ lays out edge to edge: let the navy band fill the status bar but push its
+        // title clear of the clock, and lift the list above the navigation bar.
         root.setOnApplyWindowInsetsListener(new View.OnApplyWindowInsetsListener() {
             @Override public WindowInsets onApplyWindowInsets(View view, WindowInsets insets) {
                 if (Build.VERSION.SDK_INT >= 30) {
                     Insets bars = insets.getInsets(WindowInsets.Type.systemBars());
-                    header.setPadding(dp(18), bars.top + dp(12), dp(18), dp(14));
+                    header.setPadding(dp(16), bars.top + dp(10), dp(16), dp(12));
                     content.setPadding(0, 0, 0, bars.bottom);
                 }
                 return insets;
@@ -254,11 +268,11 @@ public final class MainActivity extends Activity {
         LinearLayout header = new LinearLayout(this);
         header.setOrientation(LinearLayout.HORIZONTAL);
         header.setGravity(Gravity.CENTER_VERTICAL);
-        header.setPadding(dp(18), dp(18), dp(18), dp(14));
-        // No background of its own: the wash behind it is the header's colour.
+        header.setPadding(dp(16), dp(16), dp(16), dp(12));
+        header.setBackgroundColor(HEADER); // the site's own band, edge to edge
 
-        TextView title = text("일루전 라이브 알리미", 21);
-        title.setTextColor(INK);
+        TextView title = text("일루전 라이브 알리미", 19);
+        title.setTextColor(ON_HEADER);
         title.setTypeface(Typeface.DEFAULT_BOLD);
         title.setLetterSpacing(-0.02f); // bold display text sets tighter than the default tracking
         header.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
@@ -274,14 +288,19 @@ public final class MainActivity extends Activity {
                 if (settingsShown) showRecent(); else showSettings();
             }
         });
-        header.addView(settingsButton, new LinearLayout.LayoutParams(dp(42), dp(42)));
+        header.addView(settingsButton, new LinearLayout.LayoutParams(dp(38), dp(38)));
         return header;
     }
 
-    /** A grey pill on the white header; filled with the brand while the settings pane is open. */
+    /**
+     * A square of lifted navy on the band, inverted to a white square while the settings pane is
+     * open. Square, because the site rounds nothing it draws but avatars.
+     */
     private void styleSettingsButton(boolean active) {
-        settingsButton.setBackground(ripple(active ? BRAND : CHIP, 21, active ? ON_BRAND : BRAND));
-        settingsButton.setColorFilter(active ? ON_BRAND : INK);
+        settingsButton.setBackground(active
+                ? ripple(ON_HEADER, 0, HEADER)
+                : ripple(0x24FFFFFF, 0, ON_HEADER));
+        settingsButton.setColorFilter(active ? HEADER : ON_HEADER);
     }
 
     // ------------------------------------------------------------ recent tab
@@ -289,11 +308,11 @@ public final class MainActivity extends Activity {
     private View buildRecentView() {
         LinearLayout pane = new LinearLayout(this);
         pane.setOrientation(LinearLayout.VERTICAL);
-        pane.setPadding(dp(12), dp(12), dp(12), dp(12));
 
+        // No card and no inset: a white card on a white ground was drawing a border around
+        // nothing, and running the list to both edges gives every row back the padding.
         FrameLayout listHolder = new FrameLayout(this);
-        listHolder.setBackground(rounded(SURFACE, 18, LINE));
-        listHolder.setClipToOutline(true);
+        listHolder.setBackgroundColor(SURFACE);
         ListView list = new ListView(this);
         list.setDivider(new ColorDrawable(LINE));
         list.setDividerHeight(1);
@@ -394,22 +413,23 @@ public final class MainActivity extends Activity {
         final SharedPreferences preferences = FeedChecker.prefs(this);
         ScrollView scroll = new ScrollView(this);
         scroll.setClipToPadding(false);
+        scroll.setBackgroundColor(TRAY); // the cards need something to sit on now that they are square
         LinearLayout pane = new LinearLayout(this);
         pane.setOrientation(LinearLayout.VERTICAL);
         pane.setPadding(dp(12), dp(12), dp(12), dp(28));
 
         LinearLayout themeCard = card();
-        themeCard.addView(checkBox("다크 모드", 16, darkEnabled(),
+        themeCard.addView(switchRow("다크 모드", 15, darkEnabled(),
                 new CompoundButton.OnCheckedChangeListener() {
                     @Override public void onCheckedChanged(CompoundButton view, boolean checked) {
                         preferences.edit().putBoolean(FeedChecker.KEY_DARK, checked).commit();
                         recreate(); // the palette is read while views are built, so rebuild them
                     }
                 }), new LinearLayout.LayoutParams(-1, -2));
-        pane.addView(themeCard, matchWrap(dp(18)));
+        pane.addView(themeCard, matchWrap(dp(11)));
 
         LinearLayout backgroundCard = card();
-        backgroundCard.addView(checkBox("백그라운드 새 글 알림", 16,
+        backgroundCard.addView(switchRow("백그라운드 새 글 알림", 15,
                 preferences.getBoolean(FeedChecker.KEY_BACKGROUND, true),
                 new CompoundButton.OnCheckedChangeListener() {
                     @Override public void onCheckedChanged(CompoundButton view, boolean checked) {
@@ -434,7 +454,7 @@ public final class MainActivity extends Activity {
         batteryParams.setMargins(0, dp(12), 0, 0);
         backgroundCard.addView(batteryRow, batteryParams);
         bindBatteryRow();
-        pane.addView(backgroundCard, matchWrap(dp(18)));
+        pane.addView(backgroundCard, matchWrap(dp(11)));
 
         pane.addView(sectionTitle("게시판별 알림"), matchWrap(dp(4)));
         TextView hint = text("체크한 게시판의 새 글만 알립니다. 변경은 바로 저장됩니다.", 12.5f);
@@ -449,9 +469,9 @@ public final class MainActivity extends Activity {
             known.add(board.slug);
             if (!board.group.equals(group)) {
                 group = board.group;
-                pane.addView(groupLabel(group), wrapWrap(dp(6)));
-                groupCard = card();
-                pane.addView(groupCard, matchWrap(dp(16)));
+                groupCard = bandCard();
+                groupCard.addView(groupLabel(group), new LinearLayout.LayoutParams(-1, -2));
+                pane.addView(groupCard, matchWrap(dp(11)));
             }
             addBoardRow(groupCard, preferences, board);
         }
@@ -462,9 +482,9 @@ public final class MainActivity extends Activity {
         for (String slug : dynamic) {
             if (known.contains(slug)) continue;
             if (otherCard == null) {
-                pane.addView(groupLabel("기타"), wrapWrap(dp(6)));
-                otherCard = card();
-                pane.addView(otherCard, matchWrap(dp(16)));
+                otherCard = bandCard();
+                otherCard.addView(groupLabel("기타"), new LinearLayout.LayoutParams(-1, -2));
+                pane.addView(otherCard, matchWrap(dp(11)));
             }
             addBoardRow(otherCard, preferences, new Board(slug, slug, "기타", true));
         }
@@ -476,22 +496,22 @@ public final class MainActivity extends Activity {
     }
 
     private void addBoardRow(LinearLayout parent, final SharedPreferences preferences, final Board board) {
-        if (parent.getChildCount() > 0) {
+        if (parent.getChildCount() > 1) { // child 0 is always the member's colour band
             View divider = new View(this);
             divider.setBackgroundColor(LINE);
-            LinearLayout.LayoutParams dividerParams = new LinearLayout.LayoutParams(-1, 1);
-            dividerParams.setMargins(0, dp(12), 0, dp(12));
-            parent.addView(divider, dividerParams);
+            parent.addView(divider, new LinearLayout.LayoutParams(-1, 1));
         }
 
-        parent.addView(checkBox(board.name, 15.5f,
+        Switch row = switchRow(board.name, 14,
                 preferences.getBoolean(FeedChecker.boardEnabledKey(board.slug), board.enabledByDefault),
                 new CompoundButton.OnCheckedChangeListener() {
                     @Override public void onCheckedChanged(CompoundButton view, boolean checked) {
                         preferences.edit()
                                 .putBoolean(FeedChecker.boardEnabledKey(board.slug), checked).commit();
                     }
-                }), new LinearLayout.LayoutParams(-1, -2));
+                });
+        row.setPadding(dp(14), dp(10), dp(14), dp(10));
+        parent.addView(row, new LinearLayout.LayoutParams(-1, -2));
     }
 
     // -------------------------------------------------------------- first run
@@ -553,14 +573,14 @@ public final class MainActivity extends Activity {
         skip.setTextColor(MUTED);
         skip.setGravity(Gravity.CENTER);
         skip.setPadding(dp(16), dp(13), dp(16), dp(13));
-        skip.setBackground(ripple(SURFACE, 12, MUTED));
+        skip.setBackground(ripple(SURFACE, 0, MUTED));
 
         final TextView next = text("", 15.5f);
         next.setTypeface(Typeface.DEFAULT_BOLD);
         next.setTextColor(ON_BRAND);
         next.setGravity(Gravity.CENTER);
         next.setPadding(0, dp(13), 0, dp(13));
-        next.setBackground(ripple(BRAND, 12, ON_BRAND));
+        next.setBackground(ripple(BRAND, 0, ON_BRAND));
 
         LinearLayout buttons = new LinearLayout(this);
         buttons.setOrientation(LinearLayout.HORIZONTAL);
@@ -748,9 +768,15 @@ public final class MainActivity extends Activity {
         batteryRow.setText(exempt
                 ? "절전 예외 허용됨 · 새 글을 제때 알립니다."
                 : "절전 예외 허용하기 · 지금은 알림이 최대 9분 늦습니다.");
-        batteryRow.setTextColor(exempt ? MUTED : BRAND);
-        batteryRow.setTypeface(exempt ? Typeface.DEFAULT : Typeface.DEFAULT_BOLD);
-        batteryRow.setBackground(exempt ? rounded(CHIP, 10, 0) : ripple(CHIP, 10, BRAND));
+        // Green is the site's own "on" colour, and this row is the one place in the app with a
+        // state true enough to earn it. #00D255 straight would fail on white, so it is darkened
+        // for the light theme and lifted for the dark one.
+        boolean dark = darkEnabled();
+        batteryRow.setTextColor(exempt ? (dark ? 0xFF5CD08A : 0xFF0A7F3B) : BRAND);
+        batteryRow.setTypeface(Typeface.DEFAULT_BOLD);
+        batteryRow.setBackground(exempt
+                ? rounded(dark ? 0x2600D255 : 0x1F00D255, 0, 0)
+                : ripple(CHIP, 0, BRAND));
         batteryRow.setClickable(!exempt);
     }
 
@@ -778,11 +804,28 @@ public final class MainActivity extends Activity {
                 rounded(fill, radiusDp, 0), rounded(Color.WHITE, radiusDp, 0));
     }
 
+    /** The member's colour at full strength, ringed so a near-white member still shows an edge. */
+    private GradientDrawable dot(int color) {
+        GradientDrawable shape = new GradientDrawable();
+        shape.setShape(GradientDrawable.OVAL);
+        shape.setColor(color);
+        shape.setStroke(Math.max(1, dp(1)), RING);
+        return shape;
+    }
+
     private LinearLayout card() {
         LinearLayout view = new LinearLayout(this);
         view.setOrientation(LinearLayout.VERTICAL);
-        view.setPadding(dp(16), dp(14), dp(16), dp(16));
-        view.setBackground(rounded(SURFACE, 18, LINE));
+        view.setPadding(dp(14), dp(12), dp(14), dp(14));
+        view.setBackground(rounded(SURFACE, 0, LINE));
+        return view;
+    }
+
+    /** A card the group band can reach the edges of: the rows bring their own padding. */
+    private LinearLayout bandCard() {
+        LinearLayout view = new LinearLayout(this);
+        view.setOrientation(LinearLayout.VERTICAL);
+        view.setBackground(rounded(SURFACE, 0, LINE));
         return view;
     }
 
@@ -793,30 +836,42 @@ public final class MainActivity extends Activity {
         return view;
     }
 
-    /** Member name in that member's own colour; two-colour members use the first. */
+    /**
+     * The member's name on a band of that member's own colour, filling the top of their card.
+     * This is where the palette finally shows up unaltered: the old grey chip put the colour in
+     * the text, so {@link MemberColors#readableOn} had to darken it to stay legible and 청예솔's
+     * #FDF3EA arrived as a brown. Filling the band instead leaves the colour alone and asks only
+     * whether the *text* on it should be white or near-black — which every member answers at
+     * better than 5.7:1. Two-colour members still use the first.
+     */
     private TextView groupLabel(String value) {
         int[] colors = MemberColors.of(value);
+        int fill = colors == null ? HEADER : colors[0];
         TextView view = text(value, 12.5f);
         view.setTypeface(Typeface.DEFAULT_BOLD);
-        view.setPadding(dp(12), dp(5), dp(12), dp(6));
-        view.setBackground(rounded(CHIP, 9, 0));
-        if (colors == null) {
-            view.setTextColor(BRAND);
-            return view;
-        }
-        view.setTextColor(MemberColors.readableOn(CHIP, colors[0]));
+        view.setPadding(dp(14), dp(8), dp(14), dp(9));
+        view.setBackgroundColor(fill);
+        view.setTextColor(colors == null ? ON_HEADER : MemberColors.inkOn(fill));
         return view;
     }
 
     // --------------------------------------------------------------- helpers
 
-    private CheckBox checkBox(String label, float sp, boolean checked,
-                              CompoundButton.OnCheckedChangeListener listener) {
-        CheckBox view = new CheckBox(this);
+    /**
+     * The site's own controls are switches, and a switch says its state from across the room in a
+     * way a checkbox does not. The track takes the brand at the framework's own track alpha.
+     */
+    private Switch switchRow(String label, float sp, boolean checked,
+                             CompoundButton.OnCheckedChangeListener listener) {
+        Switch view = new Switch(this);
         view.setText(label);
         view.setTextSize(sp);
         view.setTextColor(INK);
-        view.setButtonTintList(ColorStateList.valueOf(ACCENT));
+        view.setShowText(false);
+        view.setSwitchPadding(dp(12));
+        int[][] states = {{android.R.attr.state_checked}, {}};
+        view.setTrackTintList(new ColorStateList(states, new int[]{BRAND, TRACK}));
+        view.setThumbTintList(new ColorStateList(states, new int[]{SURFACE, SURFACE}));
         view.setChecked(checked);
         view.setOnCheckedChangeListener(listener);
         return view;
@@ -837,12 +892,6 @@ public final class MainActivity extends Activity {
         return params;
     }
 
-    private LinearLayout.LayoutParams wrapWrap(int bottomMargin) {
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-2, -2);
-        params.setMargins(0, 0, 0, bottomMargin);
-        return params;
-    }
-
     private int dp(int value) {
         return Math.round(value * getResources().getDisplayMetrics().density);
     }
@@ -859,29 +908,48 @@ public final class MainActivity extends Activity {
         return null;
     }
 
-    /** "멤버 · 게시판 · 작성자 · 시간". The member name is its own view so it can take its own colour. */
-    private void bindMeta(LinearLayout metaRow, FeedParser.Post post) {
-        TextView member = (TextView) metaRow.getChildAt(0);
-        TextView rest = (TextView) metaRow.getChildAt(1);
+    /**
+     * Fills one feed row: the member's dot and name, the board and author beside them, the title
+     * under both, and the timestamp out on the right.
+     *
+     * <p>The dot carries the member's colour untouched — it is a shape, not text, so nothing has
+     * to be darkened to make it legible. The name beside it takes the same hue walked down to
+     * 4.5:1 by {@link MemberColors#readableOn}, because at full strength twelve of the fourteen
+     * members sit under 1.5:1 on white and simply vanish. Dot and name therefore read as one
+     * colour while only one of them is allowed to be the true one.
+     */
+    private void bindPost(LinearLayout row, FeedParser.Post post) {
+        LinearLayout body = (LinearLayout) row.getChildAt(0);
+        LinearLayout metaRow = (LinearLayout) body.getChildAt(0);
+        View dot = metaRow.getChildAt(0);
+        TextView member = (TextView) metaRow.getChildAt(1);
+        TextView rest = (TextView) metaRow.getChildAt(2);
+        ((TextView) body.getChildAt(1)).setText(post.title);
+        ((TextView) row.getChildAt(1)).setText(stamp(post.published));
+
         Board board = findBoard(post.boardSlug);
         String author = post.author.isEmpty() ? "" : " · " + post.author;
-        String date = post.published == 0 ? "" : " · " +
-                new SimpleDateFormat("MM-dd HH:mm", Locale.KOREA).format(new Date(post.published));
+        int[] colors = board == null ? null : MemberColors.of(board.group);
+        int seed = colors == null ? BRAND : colors[0];
 
+        dot.setBackground(dot(seed));
+        member.setTextColor(colors == null ? BRAND : MemberColors.readableOn(SURFACE, seed));
         if (board == null) {
-            member.setText("");
-            rest.setText(post.boardSlug + author + date);
+            member.setText(post.boardSlug);
+            rest.setText(author);
             return;
         }
-
         member.setText(board.group);
-        rest.setText(" · " + board.name + author + date);
-        int[] colors = MemberColors.of(board.group);
-        if (colors == null) {
-            member.setTextColor(MUTED);
-            return;
-        }
-        member.setTextColor(MemberColors.readableOn(SURFACE, colors[0]));
+        rest.setText(" · " + board.name + author);
+    }
+
+    /** Today's posts show a clock, older ones a date — the year is never the question here. */
+    private String stamp(long published) {
+        if (published == 0) return "";
+        Date when = new Date(published);
+        boolean today = new SimpleDateFormat("yyyyMMdd", Locale.KOREA).format(when)
+                .equals(new SimpleDateFormat("yyyyMMdd", Locale.KOREA).format(new Date()));
+        return new SimpleDateFormat(today ? "HH:mm" : "MM-dd", Locale.KOREA).format(when);
     }
 
     private final class PostAdapter extends BaseAdapter {
@@ -900,37 +968,59 @@ public final class MainActivity extends Activity {
         @Override public View getView(int position, View convertView, ViewGroup parent) {
             LinearLayout row = (LinearLayout) convertView;
             if (row == null) row = buildPostRow();
-            FeedParser.Post post = getItem(position);
-            ((TextView) row.getChildAt(0)).setText(post.title);
-            bindMeta((LinearLayout) row.getChildAt(1), post);
+            bindPost(row, getItem(position));
             return row;
         }
 
+        /**
+         * Meta over title, timestamp off to the right. The old row led with the title and put the
+         * meta under it; this way every title starts at the same x and the column of them can be
+         * read straight down, which is what the list is actually for.
+         */
         private LinearLayout buildPostRow() {
             LinearLayout row = new LinearLayout(MainActivity.this);
-            row.setOrientation(LinearLayout.VERTICAL);
-            row.setPadding(dp(16), dp(13), dp(16), dp(13));
-
-            TextView title = text("", 15.5f);
-            title.setTypeface(Typeface.DEFAULT_BOLD);
-            title.setMaxLines(2);
-            row.addView(title, new LinearLayout.LayoutParams(-1, -2));
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setPadding(dp(16), dp(11), dp(16), dp(12));
 
             LinearLayout meta = new LinearLayout(MainActivity.this);
             meta.setOrientation(LinearLayout.HORIZONTAL);
-            TextView member = text("", 12.5f);
+            meta.setGravity(Gravity.CENTER_VERTICAL);
+
+            View dot = new View(MainActivity.this);
+            LinearLayout.LayoutParams dotParams = new LinearLayout.LayoutParams(dp(8), dp(8));
+            dotParams.setMargins(0, 0, dp(6), 0);
+            meta.addView(dot, dotParams);
+
+            TextView member = text("", 12);
             member.setTypeface(Typeface.DEFAULT_BOLD);
             member.setSingleLine(true);
             meta.addView(member, new LinearLayout.LayoutParams(-2, -2));
-            TextView rest = text("", 12.5f);
+
+            TextView rest = text("", 12);
             rest.setTextColor(MUTED);
             rest.setSingleLine(true);
             rest.setEllipsize(TextUtils.TruncateAt.END);
             meta.addView(rest, new LinearLayout.LayoutParams(0, -2, 1));
 
-            LinearLayout.LayoutParams metaParams = new LinearLayout.LayoutParams(-1, -2);
-            metaParams.setMargins(0, dp(4), 0, 0);
-            row.addView(meta, metaParams);
+            LinearLayout body = new LinearLayout(MainActivity.this);
+            body.setOrientation(LinearLayout.VERTICAL);
+            body.addView(meta, new LinearLayout.LayoutParams(-1, -2));
+
+            TextView title = text("", 15);
+            title.setTypeface(Typeface.DEFAULT_BOLD);
+            title.setMaxLines(2);
+            LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(-1, -2);
+            titleParams.setMargins(0, dp(3), 0, 0);
+            body.addView(title, titleParams);
+            row.addView(body, new LinearLayout.LayoutParams(0, -2, 1));
+
+            TextView time = text("", 11.5f);
+            time.setTextColor(FAINT);
+            time.setSingleLine(true);
+            time.setGravity(Gravity.TOP);
+            LinearLayout.LayoutParams timeParams = new LinearLayout.LayoutParams(-2, -2);
+            timeParams.setMargins(dp(10), dp(1), 0, 0);
+            row.addView(time, timeParams);
             return row;
         }
     }

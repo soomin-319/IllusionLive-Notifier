@@ -62,6 +62,17 @@ public final class SelfTest {
         assert MemberColors.readableOn(0xFF101119, onDark) == onDark : "Dark-canvas result is stable";
         assert MemberColors.readableOn(0xFF101119, 0xFFFDF3EA) == 0xFFFDF3EA
                 : "Pale member already reads on the dark canvas";
+
+        // The settings band fills with the member's colour untouched and only picks the ink.
+        assert MemberColors.inkOn(0xFFFDF3EA) == 0xFF15161C : "Near-white band takes dark ink";
+        assert MemberColors.inkOn(0xFF9F1D4C) == 0xFFFFFFFF : "Deep band takes white ink";
+        assert MemberColors.inkOn(0xFF353958) == 0xFFFFFFFF : "The brand band takes white ink";
+        for (String group : new String[]{"유메루", "도라리", "위즐리어카", "코메", "이비 EB",
+                "쿠모리 키피", "소히", "디롬", "리이", "후유노", "루스티카나", "서몽", "청예솔", "냐루"}) {
+            int fill = MemberColors.of(group)[0];
+            assert MemberColors.readableOn(fill, MemberColors.inkOn(fill)) == MemberColors.inkOn(fill)
+                    : "Band ink already clears 4.5:1 for " + group;
+        }
         System.out.println("SELF-TEST PASS");
     }
 }
