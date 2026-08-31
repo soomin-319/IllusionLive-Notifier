@@ -5,7 +5,7 @@
         <!-- illusionlive.com brand #353958, link tone #757DBD; the shell itself is white -->
         <item name="android:colorAccent">#757DBD</item>
         <item name="android:colorPrimary">#353958</item>
-        <item name="android:statusBarColor">#FFFFFF</item>
+        <item name="android:statusBarColor">#EDE9FB</item>
         <item name="android:navigationBarColor">#FFFFFF</item>
         <item name="android:windowBackground">#FFFFFF</item>
         <item name="android:windowLightStatusBar">true</item>
