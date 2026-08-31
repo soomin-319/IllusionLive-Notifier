@@ -27,11 +27,11 @@
             </intent-filter>
         </activity>
 
-        <!-- exported so the system can deliver BOOT_COMPLETED; both handled actions are
-             protected or harmless (a feed refresh), and onReceive ignores anything else. -->
+        <!-- Not exported: the system still delivers BOOT_COMPLETED to it, while the app's own
+             CHECK action stays out of reach of other apps that could otherwise poll the feed. -->
         <receiver
             android:name=".FeedAlarmReceiver"
-            android:exported="true">
+            android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
             </intent-filter>

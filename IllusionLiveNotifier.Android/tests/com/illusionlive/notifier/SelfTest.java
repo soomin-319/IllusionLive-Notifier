@@ -31,6 +31,15 @@ public final class SelfTest {
         assert "코메".equals(post.author);
         assert post.url.startsWith("https://www.illusionlive.com/comet_004");
 
+        // The device parser ignores disallow-doctype-decl, so the byte scan has to catch the
+        // declaration on its own — in whichever encoding the response arrives.
+        String doctype = "<?xml version=\"1.0\"?><!DOCTYPE rss [" +
+                "<!ENTITY x SYSTEM \"file:///etc/hosts\">]><rss/>";
+        assert FeedParser.hasDoctype(doctype.getBytes(StandardCharsets.UTF_8)) : "UTF-8 DOCTYPE caught";
+        assert FeedParser.hasDoctype(doctype.getBytes(StandardCharsets.UTF_16LE)) : "UTF-16LE DOCTYPE caught";
+        assert FeedParser.hasDoctype(doctype.getBytes(StandardCharsets.UTF_16BE)) : "UTF-16BE DOCTYPE caught";
+        assert !FeedParser.hasDoctype(xml.getBytes(StandardCharsets.UTF_8)) : "A plain feed is not a DOCTYPE";
+
         FeedParser.Post older = new FeedParser.Post("a", "eb", "옛 글", "이비", 1000L,
                 "https://www.illusionlive.com/eb?bmode=view&idx=1");
         FeedParser.Post stale = new FeedParser.Post("a", "eb", "옛 제목", "이비", 1000L, older.url);

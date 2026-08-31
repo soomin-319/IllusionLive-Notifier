@@ -61,7 +61,7 @@ $baseApk = Join-Path $build 'base.apk'
 Assert-Exit 'Resource compile'
 & (Join-Path $tools 'aapt2.exe') link -o $baseApk -I $androidJar `
     --manifest (Join-Path $input.FullName 'AndroidManifest.xml') `
-    --min-sdk-version 26 --target-sdk-version 36 --version-code 11 --version-name 1.0.10 `
+    --min-sdk-version 26 --target-sdk-version 36 --version-code 12 --version-name 1.0.11 `
     --java $gen.FullName $compiledResources
 Assert-Exit 'APK resource link'
 
@@ -88,7 +88,15 @@ Assert-Exit 'APK alignment'
 $keyDirectory = 'C:\Android\illusion-tools\keys'
 New-Item -ItemType Directory -Force $keyDirectory | Out-Null
 $keystore = Join-Path $keyDirectory 'illusionlive-notifier.p12'
-$password = 'illusionlive-local-key'
+$password = $env:ILLUSIONLIVE_KEYSTORE_PASSWORD
+if (-not $password) {
+    throw @'
+Signing password not set. Keep it out of the repository:
+  $env:ILLUSIONLIVE_KEYSTORE_PASSWORD = '<password>'
+For an existing keystore this must be its current password; rotate it with
+  keytool -storepasswd -storetype PKCS12 -keystore C:\Android\illusion-tools\keys\illusionlive-notifier.p12
+'@
+}
 if (-not (Test-Path $keystore)) {
     & (Join-Path $jdk 'bin\keytool.exe') -genkeypair -noprompt -storetype PKCS12 `
         -keystore $keystore -storepass $password -keypass $password -alias illusionlive `

@@ -8,7 +8,6 @@
 
 - 새 글 자동 확인 및 Android 알림
 - 게시판별 알림 켜기/끄기
-- 게시판별 제목·작성자 키워드 필터 (쉼표로 OR)
 - 앱을 닫아도 백그라운드에서 새 글 자동 확인
 - 최근 글 목록에서 원문 바로 열기
 - 다크 모드 (기본값은 시스템 설정을 따름)
@@ -19,7 +18,7 @@
 1. [최신 릴리스](https://github.com/soomin-319/IllusionLive-Notifier/releases/latest)에서 `IllusionLiveNotifier.apk`를 Android 기기로 내려받아 실행
 2. 요청되면 **이 출처의 알 수 없는 앱 설치** 허용
 3. 앱 실행 후 **알림 권한** 허용
-4. 오른쪽 위 톱니바퀴에서 알림 받을 게시판과 키워드 설정
+4. 오른쪽 위 톱니바퀴에서 알림 받을 게시판 선택
 
 요구 버전: Android 8.0 (API 26) 이상.
 
@@ -30,6 +29,7 @@ APK는 로컬 자체 서명 빌드입니다. Play Store 배포본이 아니라�
 요구 사항: JDK 17, Android SDK Platform/Build Tools 36
 
 ```powershell
+$env:ILLUSIONLIVE_KEYSTORE_PASSWORD = '<서명 키 비밀번호>'   # 없으면 키스토어와 함께 새로 만들어집니다
 ./build-android.ps1
 ```
 

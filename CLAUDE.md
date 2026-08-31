@@ -10,6 +10,7 @@ IllusionLive Notifier — `https://www.illusionlive.com/rss` 새 글 알림. And
 ## 빌드
 
 ```powershell
+$env:ILLUSIONLIVE_KEYSTORE_PASSWORD = '<서명 키 비밀번호>'   # 없으면 빌드가 중단된다
 ./build-android.ps1   # Android APK (JDK 17, Android SDK Platform/Build Tools 36 필요)
 ./build.ps1           # Windows exe (dotnet publish, self-contained)
 ```
@@ -67,5 +68,6 @@ Compress-Archive -Path 'android-dist\IllusionLiveNotifier.apk' -DestinationPath 
 ## 참고
 
 - APK는 로컬 자체 서명 빌드. 키스토어: `C:\Android\illusion-tools\keys\illusionlive-notifier.p12`
+- 서명 비밀번호는 저장소에 두지 않는다. `ILLUSIONLIVE_KEYSTORE_PASSWORD` 환경변수로만 넘긴다
 - aapt2가 비ASCII 경로에서 실패하므로 빌드는 `C:\Android\illusion-tools\app-build` 에서 수행
 - 최소 지원: Android 8.0 (API 26)

@@ -40,6 +40,7 @@ internal sealed class RssFeedClient : IDisposable
     {
         var link = item.Element("link")?.Value.Trim() ?? "";
         if (!Uri.TryCreate(link, UriKind.Absolute, out var uri)) return null;
+        if (uri.Scheme != Uri.UriSchemeHttps || !IsSiteHost(uri.Host)) return null;
 
         var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
         if (!string.Equals(query["bmode"], "view", StringComparison.OrdinalIgnoreCase)) return null;
@@ -58,6 +59,11 @@ internal sealed class RssFeedClient : IDisposable
 
         return new FeedPost(id, board, title, author, published, link);
     }
+
+    /// A tampered feed must not be able to put a link to somewhere else in front of the user.
+    internal static bool IsSiteHost(string host) =>
+        string.Equals(host, "illusionlive.com", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(host, "www.illusionlive.com", StringComparison.OrdinalIgnoreCase);
 
     public void Dispose() => _http.Dispose();
 }
