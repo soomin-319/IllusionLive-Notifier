@@ -39,6 +39,39 @@ public final class SelfTest {
         assert FeedParser.hasDoctype(doctype.getBytes(StandardCharsets.UTF_16LE)) : "UTF-16LE DOCTYPE caught";
         assert FeedParser.hasDoctype(doctype.getBytes(StandardCharsets.UTF_16BE)) : "UTF-16BE DOCTYPE caught";
         assert !FeedParser.hasDoctype(xml.getBytes(StandardCharsets.UTF_8)) : "A plain feed is not a DOCTYPE";
+        assert FeedParser.hasDoctype(((char) 0xfeff + doctype).getBytes(StandardCharsets.UTF_8))
+                : "A byte-order mark does not hide the declaration";
+        assert FeedParser.hasDoctype("<!-- c --><?pi?><!DOCTYPE rss><rss/>".getBytes(StandardCharsets.UTF_8))
+                : "A declaration behind a comment is still in the prolog";
+
+        // ...but the scan stops at the root element, so a post that only quotes the string parses.
+        String cdata = "<?xml version=\"1.0\" encoding=\"UTF-8\"?><!-- <!DOCTYPE here is text --><rss><channel>" +
+                "<item><title><![CDATA[<!DOCTYPE html> explained]]></title><guid>post-9</guid>" +
+                "<link>https://www.illusionlive.com/eb?bmode=view&amp;idx=9</link></item>" +
+                "</channel></rss>";
+        assert !FeedParser.hasDoctype(cdata.getBytes(StandardCharsets.UTF_8)) : "Quoted text is not a DTD";
+        assert FeedParser.parse(cdata.getBytes(StandardCharsets.UTF_8)).size() == 1 : "The CDATA post survives";
+
+        // URI.getPath() percent-decodes, so a link can smuggle the cache separators into the slug.
+        StringBuilder overlong = new StringBuilder();
+        while (overlong.length() <= 64) overlong.append('a');
+        String hostile = "<?xml version=\"1.0\" encoding=\"UTF-8\"?><rss><channel>" +
+                "<item><title>주입</title><guid>x1</guid>" +
+                "<link>https://www.illusionlive.com/ev%1Fil%1Ex?bmode=view</link></item>" +
+                "<item><title>긴 슬러그</title><guid>x2</guid>" +
+                "<link>https://www.illusionlive.com/" + overlong + "?bmode=view</link></item>" +
+                "<item><title>정상</title><guid>x3</guid>" +
+                "<link>https://www.illusionlive.com/eb?bmode=view</link></item>" +
+                "</channel></rss>";
+        List<FeedParser.Post> guarded = FeedParser.parse(hostile.getBytes(StandardCharsets.UTF_8));
+        assert guarded.size() == 1 : "A slug carrying a separator or padding the board list is dropped";
+        assert "eb".equals(guarded.get(0).boardSlug) : "The post beside it is untouched";
+        assert FeedParser.decode(FeedParser.encode(guarded)).size() == 1 : "So the round-trip loses nothing";
+
+        String unit = String.valueOf((char) 0x1f);
+        assert FeedParser.decode("x" + unit + "eb" + unit + "제목" + unit + "이비" + unit + "1000"
+                + unit + "javascript:alert(1)").isEmpty()
+                : "A stored row that is not https never reaches ACTION_VIEW";
 
         FeedParser.Post older = new FeedParser.Post("a", "eb", "옛 글", "이비", 1000L,
                 "https://www.illusionlive.com/eb?bmode=view&idx=1");
