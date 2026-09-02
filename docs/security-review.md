@@ -6,7 +6,7 @@
 - 이전 점검(`23d8110`, PR #16)에서 고친 항목은 [이미 막혀 있는 것](#이미-막혀-있는-것)에 정리했고, 이 문서는 **아직 남아 있는 것**만 다룬다.
 - 같은 저장소의 Windows 앱은 이 문서 범위 밖이다.
 
-앱은 서버·계정·추적이 없고 외부에서 들어오는 데이터가 RSS 피드 하나뿐이다. 그래서 위험은 대부분 "피드 내용이 앱을 어디까지 흔들 수 있는가"와 "APK 서명 과정"에 몰려 있다. 원격 코드 실행이나 데이터 유출로 이어지는 결함은 발견되지 않았다.
+앱은 서버·계정·추적이 없고 외부에서 들어오는 데이터가 RSS 피드 하나뿐이다. 그래서 위험은 대부분 "피드 내용이 앱을 어디까지 흔들 수 있는가"에 몰려 있다. 원격 코드 실행이나 데이터 유출로 이어지는 결함은 발견되지 않았다.
 
 ## 요약
 
@@ -14,9 +14,8 @@
 |---|--------|------|------|------|
 | [1](#1-피드-글-하나가-전체-알림을-멈출-수-있다) | 중 | `FeedParser.java:56,178` | CDATA 안의 `<!DOCTYPE` 문자열이 피드 전체 파싱을 중단시킨다 | 재현됨 |
 | [2](#2-피드-링크가-캐시-구분자를-주입할-수-있다) | 중 | `FeedParser.java:123,88,99` | 링크 경로의 `%1F`/`%1E`가 캐시 구분자와 충돌해 다른 글까지 사라진다 | 재현됨 |
-| [3](#3-서명-비밀번호가-명령줄-인자로-노출된다) | 중 | `build-android.ps1:102,109-110` | 키스토어 비밀번호를 명령줄 인자로 넘겨 같은 PC의 다른 프로세스가 읽을 수 있다 | 코드 확인 |
-| [4](#4-캐시에서-꺼낸-링크를-검증-없이-연다) | 하 | `MainActivity.java:773`, `FeedParser.java:99` | 파서가 건 https·호스트 검증이 캐시를 거치면 사라진다 | 재현됨 |
-| [5](#5-게시판-목록이-줄지-않고-늘기만-한다) | 하 | `FeedChecker.java:158,179` | `dynamic_boards`와 `board_enabled_*` 키가 정리되지 않는다 | 코드 확인 |
+| [3](#3-캐시에서-꺼낸-링크를-검증-없이-연다) | 하 | `MainActivity.java:773`, `FeedParser.java:99` | 파서가 건 https·호스트 검증이 캐시를 거치면 사라진다 | 재현됨 |
+| [4](#4-게시판-목록이-줄지-않고-늘기만-한다) | 하 | `FeedChecker.java:158,179` | `dynamic_boards`와 `board_enabled_*` 키가 정리되지 않는다 | 코드 확인 |
 
 ---
 
@@ -88,36 +87,7 @@ after cache round-trip = 1  (both should survive)
 
 앞쪽이 더 작다. 자기 검사에 위 `%1F` 링크를 넣어 왕복 후 개수가 유지되는지 고정한다.
 
-## 3. 서명 비밀번호가 명령줄 인자로 노출된다
-
-**심각도: 중** · `build-android.ps1:102`, `build-android.ps1:109-110`
-
-비밀번호를 저장소에서 빼내 환경변수로 옮긴 것은 이전 점검에서 이미 처리됐다. 다만 그 값을 도구에 넘기는 방식이 아직 명령줄이다.
-
-```powershell
-& (Join-Path $jdk 'bin\keytool.exe') -genkeypair -noprompt -storetype PKCS12 `
-    -keystore $keystore -storepass $password -keypass $password -alias illusionlive `
-...
-& (Join-Path $tools 'apksigner.bat') sign --ks $keystore --ks-pass "pass:$password" `
-    --key-pass "pass:$password" --out $signedApk $alignedApk
-```
-
-Windows에서 프로세스의 명령줄은 같은 사용자로 도는 **다른 프로세스가 읽을 수 있다** (`Get-CimInstance Win32_Process | Select CommandLine`). 빌드가 도는 몇 초 동안 그 PC의 임의 프로그램이 서명 키 비밀번호를 그대로 가져갈 수 있다.
-
-키가 새면 영향이 이 항목 중 가장 크다. 이 앱을 사칭한 APK에 같은 서명이 붙고, **사용자 기기에서는 경고 없이 정품 업데이트로 덮어써진다.** APK가 Play Store가 아니라 로컬 자체 서명으로 배포되고 있어서 서명 키가 유일한 신뢰 기준이다.
-
-**고칠 방향** — `apksigner`는 명령줄 대신 환경변수·파일·표준입력에서 비밀번호를 읽는 형식을 지원한다.
-
-```powershell
-& (Join-Path $tools 'apksigner.bat') sign --ks $keystore `
-    --ks-pass env:ILLUSIONLIVE_KEYSTORE_PASSWORD `
-    --key-pass env:ILLUSIONLIVE_KEYSTORE_PASSWORD `
-    --out $signedApk $alignedApk
-```
-
-`keytool`에는 대응되는 형식이 없으므로 `-storepass`/`-keypass`를 빼고 표준입력으로 넘긴다. 이 경로는 키스토어가 없을 때 한 번만 타므로 대화형으로 두어도 손해가 없다.
-
-## 4. 캐시에서 꺼낸 링크를 검증 없이 연다
+## 3. 캐시에서 꺼낸 링크를 검증 없이 연다
 
 **심각도: 하 (심층 방어)** · `MainActivity.java:773`, `FeedParser.java:99`
 
@@ -139,7 +109,7 @@ decoded url = javascript:alert(1)
 
 **고칠 방향** — `decode`에서 https가 아닌 행을 버린다. 열기 직전에 막는 것보다 낫다. 이미 저장돼 있는 캐시까지 한 번에 정리되고, 캐시를 읽는 자리가 앞으로 늘어도 검사가 따라간다.
 
-## 5. 게시판 목록이 줄지 않고 늘기만 한다
+## 4. 게시판 목록이 줄지 않고 늘기만 한다
 
 **심각도: 하** · `FeedChecker.java:158`, `FeedChecker.java:179`
 
@@ -164,7 +134,7 @@ for (FeedParser.Post post : posts) {
 - **평문 통신 차단** — `android:usesCleartextTraffic="false"`, 파서가 https 강제.
 - **백업 차단** — `android:allowBackup="false"` 라 adb 백업으로 앱 데이터를 빼거나 심을 수 없다.
 - **리시버 비공개** — `FeedAlarmReceiver`가 `exported="false"`. BOOT_COMPLETED는 여전히 도착하지만 다른 앱이 CHECK 액션을 던져 피드를 긁게 만들 수 없다.
-- **링크 출처 검증** — `parseItem`이 스킴 https + 호스트 `illusionlive.com`/`www.illusionlive.com` + `bmode=view` 를 요구한다. 변조된 피드가 외부 링크를 목록에 밀어 넣지 못한다. ([4번](#4-캐시에서-꺼낸-링크를-검증-없이-연다)은 이 검증이 캐시를 못 넘는다는 별개 문제다.)
+- **링크 출처 검증** — `parseItem`이 스킴 https + 호스트 `illusionlive.com`/`www.illusionlive.com` + `bmode=view` 를 요구한다. 변조된 피드가 외부 링크를 목록에 밀어 넣지 못한다. ([3번](#3-캐시에서-꺼낸-링크를-검증-없이-연다)은 이 검증이 캐시를 못 넘는다는 별개 문제다.)
 - **XXE** — DOCTYPE 사전 스캔이 UTF-8·UTF-16LE·UTF-16BE 표기를 모두 잡고, 자기 검사가 이를 고정하고 있다. Android의 `DocumentBuilderFactory`가 `disallow-doctype-decl` 계열 기능 이름을 전부 거부하므로 기기에서 실제로 막는 것은 이 스캔이다. ([1번](#1-피드-글-하나가-전체-알림을-멈출-수-있다)은 이 스캔이 **너무 많이** 잡는 문제이지 못 잡는 문제가 아니다.)
 - **응답 크기** — `MAX_FEED_BYTES` 2 MB 상한을 읽는 도중에 건다.
 - **PendingIntent** — `FLAG_IMMUTABLE` 사용. 다른 앱이 인텐트 내용을 바꿔 재사용할 수 없다.
@@ -177,11 +147,10 @@ for (FeedParser.Post post : posts) {
 ## 권장 순서
 
 1. **[1번](#1-피드-글-하나가-전체-알림을-멈출-수-있다)** — 유일하게 공격자 없이도 터지는 항목이다. 사이트에 그런 제목의 글이 올라오면 전 사용자 알림이 멈춘다.
-2. **[3번](#3-서명-비밀번호가-명령줄-인자로-노출된다)** — 영향이 가장 크고(키 유출 = 앱 사칭) 고치는 데 한 줄이다.
-3. **[2번](#2-피드-링크가-캐시-구분자를-주입할-수-있다) + [5번](#5-게시판-목록이-줄지-않고-늘기만-한다)** — 둘 다 `parseItem`의 slug 검증 한 곳에서 처리된다.
-4. **[4번](#4-캐시에서-꺼낸-링크를-검증-없이-연다)** — `decode`에 https 검사 한 줄.
+2. **[2번](#2-피드-링크가-캐시-구분자를-주입할-수-있다) + [4번](#4-게시판-목록이-줄지-않고-늘기만-한다)** — 둘 다 `parseItem`의 slug 검증 한 곳에서 처리된다.
+3. **[3번](#3-캐시에서-꺼낸-링크를-검증-없이-연다)** — `decode`에 https 검사 한 줄.
 
-1·2·4번은 실제로 재현해 확인했다. 재현에 쓴 코드는 이 저장소에 남기지 않았고, 고칠 때 각 항목의 "고칠 방향"에 적은 단정을 `SelfTest`에 넣어 회귀를 막는 편이 낫다.
+1·2·3번은 실제로 재현해 확인했다. 재현에 쓴 코드는 이 저장소에 남기지 않았고, 고칠 때 각 항목의 "고칠 방향"에 적은 단정을 `SelfTest`에 넣어 회귀를 막는 편이 낫다.
 
 ## 점검 범위 밖
 
