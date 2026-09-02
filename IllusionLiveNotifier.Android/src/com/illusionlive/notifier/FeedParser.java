@@ -21,10 +21,13 @@ import java.util.Locale;
 import javax.xml.parsers.DocumentBuilderFactory;
 
 final class FeedParser {
-    // ASCII record/unit separators: RSS text never carries control characters, so no escaping.
-    // ponytail: a row holding one of them is dropped on decode, switch to JSON if that ever happens.
+    // ASCII record/unit separators: parseItem drops a post whose slug carries one and strips them
+    // from the text fields, so nothing written here can hold them and no escaping is needed.
+    // ponytail: switch to JSON if a field ever has to keep a control character.
     private static final char UNIT = 0x1f;
     private static final char RECORD = 0x1e;
+    /** A board slug is a short path segment; anything longer is the feed padding the board list. */
+    private static final int MAX_SLUG_LENGTH = 64;
 
     private static final Comparator<Post> NEWEST_FIRST = new Comparator<Post>() {
         @Override public int compare(Post left, Post right) {
@@ -102,6 +105,10 @@ final class FeedParser {
         for (String row : text.split(String.valueOf(RECORD), -1)) {
             String[] parts = row.split(String.valueOf(UNIT), -1);
             if (parts.length != 6) continue;
+            // parseItem only ever stores an https illusionlive.com link, but nothing re-checks that
+            // once a row has been through storage, and MainActivity hands the url straight to
+            // ACTION_VIEW. Re-assert the cheap half of it here so the cache cannot widen it.
+            if (!parts[5].startsWith("https://")) continue;
             try {
                 posts.add(new Post(parts[0], parts[1], parts[2], parts[3],
                         Long.parseLong(parts[4]), parts[5]));
@@ -121,18 +128,38 @@ final class FeedParser {
 
             String path = uri.getPath() == null ? "" : uri.getPath();
             path = path.replaceAll("^/+|/+$", "");
-            if (path.isEmpty()) return null;
+            if (!usableSlug(path)) return null;
 
-            String title = value(item, "title").trim();
+            String title = clean(value(item, "title"));
             if (title.isEmpty()) title = "(제목 없음)";
-            String author = value(item, "author").trim();
-            if (author.isEmpty()) author = value(item, "creator").trim();
-            String id = value(item, "guid").trim();
+            String author = clean(value(item, "author"));
+            if (author.isEmpty()) author = clean(value(item, "creator"));
+            String id = clean(value(item, "guid"));
             if (id.isEmpty()) id = link;
             return new Post(id, path, title, author, parseDate(value(item, "pubDate")), link);
         } catch (Exception ignored) {
             return null;
         }
+    }
+
+    /**
+     * {@link URI#getPath()} percent-decodes, so a link can hand us a slug holding {@link #UNIT} or
+     * {@link #RECORD}. {@link #encode} writes those out raw, which shifts the row boundaries and
+     * takes neighbouring posts down on decode; an over-long slug instead pads the board list.
+     * Neither belongs in a board name, so the post goes rather than the storage format changing.
+     */
+    private static boolean usableSlug(String slug) {
+        if (slug.isEmpty() || slug.length() > MAX_SLUG_LENGTH) return false;
+        for (int i = 0; i < slug.length(); i++) {
+            char c = slug.charAt(i);
+            if (c < 0x20 || c == 0x7f) return false;
+        }
+        return true;
+    }
+
+    /** Same reasoning for the fields kept rather than dropped: shown text loses its controls. */
+    private static String clean(String text) {
+        return text.replaceAll("\\p{Cntrl}", " ").trim();
     }
 
     private static String value(Element parent, String wanted) {
@@ -174,10 +201,28 @@ final class FeedParser {
     /**
      * Byte scan rather than a decode: the declared encoding cannot be trusted before parsing, and
      * dropping NUL bytes first makes the UTF-16 spelling of the same declaration match too.
+     *
+     * <p>Only the prolog is walked. A DOCTYPE may not follow the root element, so stopping there
+     * still catches every real declaration while leaving a post that merely quotes the string —
+     * a CDATA title, say — to parse like any other.
      */
     static boolean hasDoctype(byte[] xml) {
         String text = new String(xml, StandardCharsets.ISO_8859_1).replace("\0", "");
-        return text.toUpperCase(Locale.ROOT).contains("<!DOCTYPE");
+        int at = 0;
+        while (at < text.length()) {
+            char c = text.charAt(at);
+            // whitespace, and the stray high bytes a byte-order mark leaves behind, declare nothing
+            if (c > 0x7f || Character.isWhitespace(c)) { at++; continue; }
+            if (text.regionMatches(true, at, "<!DOCTYPE", 0, 9)) return true;
+            String close;
+            if (text.startsWith("<!--", at)) close = "-->";
+            else if (text.startsWith("<?", at)) close = "?>";
+            else return false; // the root element starts here, and the prolog is over
+            int end = text.indexOf(close, at + 2);
+            if (end < 0) return false; // unterminated: the parse below rejects the document anyway
+            at = end + close.length();
+        }
+        return false;
     }
 
     private static void setFeature(DocumentBuilderFactory factory, String name, boolean value) {

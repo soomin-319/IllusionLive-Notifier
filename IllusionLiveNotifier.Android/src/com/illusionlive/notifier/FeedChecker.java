@@ -151,11 +151,8 @@ final class FeedChecker {
         boolean initialized = preferences.getBoolean("initialized", false);
         Set<String> seen = new HashSet<>(preferences.getStringSet("seen_ids", Collections.<String>emptySet()));
         List<FeedParser.Post> fresh = new ArrayList<>();
-        Set<String> boards = new HashSet<>(preferences.getStringSet(KEY_DYNAMIC_BOARDS,
-                Collections.<String>emptySet()));
 
         for (FeedParser.Post post : posts) {
-            boards.add(post.boardSlug);
             if (initialized && !seen.contains(post.id)) fresh.add(post);
         }
 
@@ -172,6 +169,12 @@ final class FeedChecker {
         }
 
         List<FeedParser.Post> merged = FeedParser.merge(posts, cachedPosts(context), MAX_CACHED_POSTS);
+
+        // Derived from the capped cache rather than accumulated across checks: a board a tampered
+        // feed invented leaves the settings list once its posts age out, and the list can never
+        // grow past MAX_CACHED_POSTS entries. Slug length and characters are capped in parseItem.
+        Set<String> boards = new HashSet<>();
+        for (FeedParser.Post post : merged) boards.add(post.boardSlug);
 
         preferences.edit()
                 .putBoolean("initialized", true)
