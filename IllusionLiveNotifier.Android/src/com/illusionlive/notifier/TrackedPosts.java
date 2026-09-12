@@ -130,7 +130,8 @@ final class TrackedPosts {
             if (parts.length != 6) continue;
             // 저장을 거친 값은 다시 확인한다. 캐시가 검사 범위를 넓힐 수 없게.
             if (!parts[0].startsWith("https://")) continue;
-            if (!CODE.matcher(parts[1]).matches() || !CODE.matcher(parts[2]).matches()) continue;
+            if (!CODE.matcher(parts[1]).matches() || parts[1].charAt(0) != 'p') continue;
+            if (!CODE.matcher(parts[2]).matches() || parts[2].charAt(0) != 'b') continue;
             try {
                 list.add(new Tracked(parts[0], parts[1], parts[2],
                         Long.parseLong(parts[3]), Long.parseLong(parts[4]),

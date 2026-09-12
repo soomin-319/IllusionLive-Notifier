@@ -294,10 +294,23 @@ public final class SelfTest {
         List<TrackedPosts.Tracked> decoded = TrackedPosts.decode(encoded);
         assert decoded.size() == many.size();
         assert decoded.get(0).url.equals(many.get(0).url);
+        assert decoded.get(0).postCode.equals(many.get(0).postCode);
         assert decoded.get(0).boardCode.equals(many.get(0).boardCode);
+        assert decoded.get(0).added == many.get(0).added;
+        assert decoded.get(0).checked == many.get(0).checked;
         assert decoded.get(0).reason == many.get(0).reason;
         assert TrackedPosts.decode("").isEmpty();
         assert TrackedPosts.decode("깨진줄").isEmpty() : "필드 수가 안 맞으면 그 줄은 버린다";
+
+        // 저장된 코드의 접두 문자도 검사한다. 필드 순서를 바꾸면 걸린다.
+        char UNIT = 0x1f;
+        char RECORD = 0x1e;
+        String swappedCodes = "https://www.illusionlive.com/eb?idx=5" + UNIT
+                + "b2026090300000000000b1" + UNIT  // postCode 자리에 b-접두 코드
+                + "p2026090300000000000a1" + UNIT  // boardCode 자리에 p-접두 코드
+                + now + UNIT + "0" + UNIT + "1";
+        assert TrackedPosts.decode(swappedCodes).isEmpty()
+                : "postCode/boardCode 가 뒤바뀐 저장 행은 버린다";
 
         // 형식이 틀린 코드는 애초에 들어가지 않는다.
         List<TrackedPosts.Tracked> rejected = TrackedPosts.add(new ArrayList<TrackedPosts.Tracked>(),
