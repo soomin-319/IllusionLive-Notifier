@@ -151,6 +151,47 @@ public final class SelfTest {
         assert CommentParser.parseComments("<div class=\"comment\" id=\"cZZZ\"></div>").isEmpty()
                 : "본문 없는 껍데기는 버린다";
 
+        // 중첩 댓글(답글): _sub_comment_wrap 안에 완전한 comment 블록이 하나 더 있다.
+        String nestedHtml =
+                "<div class=\"comment\" id=\"c2026081011a2b3c4d5e6f\">" +
+                "<div class=\" main_comment _comment_wrap _comment_wrap_c2026081011a2b3c4d5e6f\">" +
+                "<div class=\"write\">원글작성자<span class=\"_comment_at_nick tag date\">2026-08-10 11:00</span></div>" +
+                "<span class=\"_comment_body_m20260818c51a24881609d  _comment_body_c2026081011a2b3c4d5e6f\"" +
+                " comment_body_code=\"c2026081011a2b3c4d5e6f\">원 댓글이에요</span>" +
+                "</div>" +
+                "<div class=\"dropdown_comment _sub_comment_wrap sub_comment_wrap\">" +
+                "<div class=\"comment\" id=\"c2026081011f6e5d4c3b2a\">" +
+                "<div class=\" main_comment _comment_wrap _comment_wrap_c2026081011f6e5d4c3b2a\">" +
+                "<div class=\"write\">답글작성자<span class=\"_comment_at_nick tag date\">2026-08-10 11:05</span></div>" +
+                "<span class=\"_comment_body_m2026020341fbaa000ea22  _comment_body_c2026081011f6e5d4c3b2a\"" +
+                " comment_body_code=\"c2026081011f6e5d4c3b2a\">답글이에요</span>" +
+                "</div></div>" +
+                "</div>" +
+                "</div>";
+
+        List<CommentParser.Comment> nested = CommentParser.parseComments(nestedHtml);
+        assert nested.size() == 2 : "중첩된 답글도 함께 수집된다";
+        assert "c2026081011a2b3c4d5e6f".equals(nested.get(0).code) : "부모 댓글이 먼저 온다";
+        assert "원글작성자".equals(nested.get(0).author) : "부모 댓글의 작성자";
+        assert "원 댓글이에요".equals(nested.get(0).body) : "부모 댓글의 본문";
+        assert "c2026081011f6e5d4c3b2a".equals(nested.get(1).code) : "중첩된 답글이 그 다음에 온다";
+        assert "답글작성자".equals(nested.get(1).author) : "답글의 작성자";
+        assert "답글이에요".equals(nested.get(1).body) : "답글의 본문";
+
+        // 본문 span 이 안 닫히면 2000자 뒤의 무관한 태그까지 삼키지 않고 그 댓글을 버린다.
+        StringBuilder filler = new StringBuilder();
+        while (filler.length() <= 2000) filler.append('a');
+        String unclosedHtml =
+                "<div class=\"comment\" id=\"c2026081200a0a0a0a0a0a\">" +
+                "<div class=\" main_comment _comment_wrap _comment_wrap_c2026081200a0a0a0a0a0a\">" +
+                "<div class=\"write\">미확인<span class=\"_comment_at_nick tag date\">2026-08-12 00:00</span></div>" +
+                "<span class=\"_comment_body_m20260818c51a24881609d  _comment_body_c2026081200a0a0a0a0a0a\"" +
+                " comment_body_code=\"c2026081200a0a0a0a0a0a\">닫히지 않음 " + filler +
+                "<span class=\"pager\">1</span>" +
+                "</div></div>";
+        assert CommentParser.parseComments(unclosedHtml).isEmpty()
+                : "본문이 2000자 안에 닫히지 않으면 뒤 마크업을 삼키지 않고 버린다";
+
         System.out.println("SELF-TEST PASS");
     }
 }

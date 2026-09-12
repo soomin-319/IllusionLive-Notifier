@@ -22,8 +22,11 @@ final class CommentParser {
     private static final Pattern AUTHOR =
             Pattern.compile("<div class=\"write\">(.*?)<span", Pattern.DOTALL);
     private static final Pattern MEMBER = Pattern.compile("_comment_body_(m[0-9a-f]+)");
+    /** 본문은 닫는 태그를 최대 이만큼 뒤에서 찾는다. 못 찾으면 그 댓글은 버린다 — 그러지
+     *  않으면 마지막 댓글의 span 이 안 닫혔을 때 뒤에 오는 무관한 마크업까지 끌려온다. */
+    private static final int MAX_BODY_SCAN = 2000;
     private static final Pattern BODY = Pattern.compile(
-            "comment_body_code=\"([^\"]*)\"\\s*>(.*?)</span>", Pattern.DOTALL);
+            "comment_body_code=\"([^\"]*)\"\\s*>(.{0," + MAX_BODY_SCAN + "}?)</span>", Pattern.DOTALL);
     private static final Pattern TAG = Pattern.compile("<[^>]*>", Pattern.DOTALL);
     /** 알림 한 줄에 들어갈 만큼만 남긴다. */
     private static final int MAX_BODY = 120;
