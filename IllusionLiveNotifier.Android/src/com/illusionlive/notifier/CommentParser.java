@@ -22,14 +22,15 @@ final class CommentParser {
     private static final Pattern AUTHOR =
             Pattern.compile("<div class=\"write\">(.*?)<span", Pattern.DOTALL);
     private static final Pattern MEMBER = Pattern.compile("_comment_body_(m[0-9a-f]+)");
-    /** 본문은 닫는 태그를 최대 이만큼 뒤에서 찾는다. 못 찾으면 그 댓글은 버린다 — 그러지
-     *  않으면 마지막 댓글의 span 이 안 닫혔을 때 뒤에 오는 무관한 마크업까지 끌려온다. */
-    private static final int MAX_BODY_SCAN = 2000;
     private static final Pattern BODY = Pattern.compile(
-            "comment_body_code=\"([^\"]*)\"\\s*>(.{0," + MAX_BODY_SCAN + "}?)</span>", Pattern.DOTALL);
+            "comment_body_code=\"([^\"]*)\"\\s*>(.*?)</span>", Pattern.DOTALL);
     private static final Pattern TAG = Pattern.compile("<[^>]*>", Pattern.DOTALL);
     /** 알림 한 줄에 들어갈 만큼만 남긴다. */
     private static final int MAX_BODY = 120;
+    /** 모든 댓글의 본문 span 바로 뒤에 붙는 툴바. 여기서 자르면 span 이 안 닫혀도 뒤 마크업을
+     *  물지 않는다. 마커가 없으면(마크업이 바뀌면) 블록 전체를 그대로 써서 오늘과 같은 동작으로
+     *  물러난다. */
+    private static final String BODY_END_MARKER = "class=\"tools";
 
     private CommentParser() {}
 
@@ -66,7 +67,9 @@ final class CommentParser {
     }
 
     private static Comment parseBlock(String block) {
-        Matcher body = BODY.matcher(block);
+        int toolsAt = block.indexOf(BODY_END_MARKER);
+        String bodyRegion = toolsAt < 0 ? block : block.substring(0, toolsAt);
+        Matcher body = BODY.matcher(bodyRegion);
         if (!body.find()) return null;
         String code = body.group(1);
         if (!CODE.matcher(code).matches()) return null;
