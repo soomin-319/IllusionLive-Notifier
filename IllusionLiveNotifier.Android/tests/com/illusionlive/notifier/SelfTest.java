@@ -115,6 +115,42 @@ public final class SelfTest {
             assert MemberColors.readableOn(fill, MemberColors.inkOn(fill)) == MemberColors.inkOn(fill)
                     : "Band ink already clears 4.5:1 for " + group;
         }
+        // ------------------------------------------------------------ 댓글 파싱
+        String commentHtml =
+                "<div class=\"comment\" id=\"c202608090b81597ef232d\">" +
+                "<div class=\" main_comment _comment_wrap _comment_wrap_c202608090b81597ef232d\">" +
+                "<div class=\"write\">위즐리어카<span class=\"_comment_at_nick tag date\">2026-08-09 01:32</span></div>" +
+                "<span class=\"_comment_body_m20260818c51a24881609d  _comment_body_c202608090b81597ef232d\"" +
+                " comment_body_code=\"c202608090b81597ef232d\">\n밑에 영상 링크가<br />\r\n잘못된 것 같아염\n</span>" +
+                "</div></div>" +
+                "<div class=\"comment\" id=\"c20260809dbcf697bb6e08\">" +
+                "<div class=\" main_comment _comment_wrap _comment_wrap_c20260809dbcf697bb6e08\">" +
+                "<div class=\"write\">유메루<span class=\"_comment_at_nick tag date\">2026-08-09 01:35</span></div>" +
+                "<span class=\"_comment_body_m2026020341fbaa000ea22  _comment_body_c20260809dbcf697bb6e08\"" +
+                " comment_body_code=\"c20260809dbcf697bb6e08\">이거 맞아염 ヽ(*。&gt;Д&lt;)o゜</span>" +
+                "</div></div>";
+
+        List<CommentParser.Comment> comments = CommentParser.parseComments(commentHtml);
+        assert comments.size() == 2 : "댓글 두 개가 순서대로 나온다";
+        assert "c202608090b81597ef232d".equals(comments.get(0).code);
+        assert "위즐리어카".equals(comments.get(0).author);
+        assert "m20260818c51a24881609d".equals(comments.get(0).member);
+        assert "밑에 영상 링크가 잘못된 것 같아염".equals(comments.get(0).body)
+                : "<br> 는 공백이 되고 앞뒤 공백은 사라진다: [" + comments.get(0).body + "]";
+        assert "유메루".equals(comments.get(1).author);
+        assert "이거 맞아염 ヽ(*。>Д<)o゜".equals(comments.get(1).body)
+                : "HTML 엔티티가 풀린다: [" + comments.get(1).body + "]";
+
+        // 코드 형식이 맞지 않으면 그 댓글만 버린다.
+        String badCode = commentHtml.replace("comment_body_code=\"c202608090b81597ef232d\"",
+                "comment_body_code=\"c../../etc\"");
+        assert CommentParser.parseComments(badCode).size() == 1 : "형식이 틀린 코드는 버린다";
+
+        // 작성자와 본문이 비어도 파싱 자체는 무너지지 않는다.
+        assert CommentParser.parseComments("").isEmpty() : "빈 문자열은 빈 목록";
+        assert CommentParser.parseComments("<div class=\"comment\" id=\"cZZZ\"></div>").isEmpty()
+                : "본문 없는 껍데기는 버린다";
+
         System.out.println("SELF-TEST PASS");
     }
 }
