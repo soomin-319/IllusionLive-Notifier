@@ -209,6 +209,22 @@ public final class SelfTest {
         assert CommentParser.parseComments(unclosedHtml).isEmpty()
                 : "본문이 안 닫히면 tools 뒤 페이저 마크업을 삼키지 않고 버린다";
 
+        // --------------------------------------------- 글 페이지에서 두 코드 뽑기
+        String page = "<form id=\"comment_form\">" +
+                "<input type=\"hidden\" name=\"post_code\" value=\"p20260809213e43a4f8ac7\">" +
+                "<input type=\"hidden\" name=\"board_code\" value=\"b20260808bcd2709bb86e5\">" +
+                "<input type=\"hidden\" name=\"comment_token\" value=\"uKkIdNEaSBBahdwJ+2otkk==\">" +
+                "</form>";
+        assert "p20260809213e43a4f8ac7".equals(CommentParser.postCode(page));
+        assert "b20260808bcd2709bb86e5".equals(CommentParser.boardCode(page));
+        assert CommentParser.postCode("<html></html>").isEmpty() : "없으면 빈 문자열";
+        assert CommentParser.postCode(
+                "<input name=\"post_code\" value=\"p20260809../../x\">").isEmpty()
+                : "형식이 틀리면 빈 문자열";
+        assert CommentParser.boardCode(
+                "<input name=\"board_code\" value=\"p20260809213e43a4f8ac7\">").isEmpty()
+                : "접두 문자가 다르면 board_code 가 아니다";
+
         System.out.println("SELF-TEST PASS");
     }
 }

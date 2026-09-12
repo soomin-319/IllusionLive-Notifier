@@ -31,6 +31,8 @@ final class CommentParser {
      *  물지 않는다. 마커가 없으면(마크업이 바뀌면) 블록 전체를 그대로 써서 오늘과 같은 동작으로
      *  물러난다. */
     private static final String BODY_END_MARKER = "class=\"tools";
+    private static final Pattern POST_CODE = hidden("post_code");
+    private static final Pattern BOARD_CODE = hidden("board_code");
 
     private CommentParser() {}
 
@@ -64,6 +66,25 @@ final class CommentParser {
             if (comment != null) comments.add(comment);
         }
         return comments;
+    }
+
+    /** 글 페이지의 댓글 폼에 박혀 있는 글 코드. 없거나 형식이 틀리면 빈 문자열. */
+    static String postCode(String pageHtml) { return code(pageHtml, POST_CODE, 'p'); }
+
+    /** 같은 폼의 게시판 코드. 댓글 조회에 두 값이 모두 필요하다. */
+    static String boardCode(String pageHtml) { return code(pageHtml, BOARD_CODE, 'b'); }
+
+    private static String code(String pageHtml, Pattern pattern, char prefix) {
+        if (pageHtml == null) return "";
+        Matcher matcher = pattern.matcher(pageHtml);
+        if (!matcher.find()) return "";
+        String value = matcher.group(1);
+        if (value.isEmpty() || value.charAt(0) != prefix) return "";
+        return CODE.matcher(value).matches() ? value : "";
+    }
+
+    private static Pattern hidden(String name) {
+        return Pattern.compile("name=\"" + name + "\"\\s+value=\"([^\"]*)\"");
     }
 
     private static Comment parseBlock(String block) {
