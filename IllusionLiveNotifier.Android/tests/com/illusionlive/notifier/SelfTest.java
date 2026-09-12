@@ -3,6 +3,7 @@ package com.illusionlive.notifier;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -246,6 +247,69 @@ public final class SelfTest {
                 : "댓글 폼이 없으면 신뢰할 수 없다";
         assert CommentParser.boardCode(pageWithoutForm).isEmpty()
                 : "댓글 폼이 없으면 신뢰할 수 없다";
+
+        // ---------------------------------------------------------- 추적 목록
+        long now = 1_760_000_000_000L;
+        long day = 24L * 60 * 60 * 1000;
+
+        List<TrackedPosts.Tracked> tracked = new ArrayList<>();
+        tracked = TrackedPosts.add(tracked, "https://www.illusionlive.com/eb?idx=1",
+                "p2026090300000000000a1", "b2026090300000000000b1", TrackedPosts.MY_POST, now);
+        assert tracked.size() == 1;
+        assert tracked.get(0).reason == TrackedPosts.MY_POST;
+
+        // 같은 글이 다시 들어오면 늘지 않고 사유만 합쳐진다.
+        tracked = TrackedPosts.add(tracked, "https://www.illusionlive.com/eb?idx=1",
+                "p2026090300000000000a1", "b2026090300000000000b1", TrackedPosts.MY_COMMENT, now);
+        assert tracked.size() == 1 : "같은 url 은 한 줄";
+        assert tracked.get(0).reason == (TrackedPosts.MY_POST | TrackedPosts.MY_COMMENT);
+
+        // 3일이 지난 항목은 다음 add 에서 사라진다.
+        List<TrackedPosts.Tracked> aged = TrackedPosts.add(tracked,
+                "https://www.illusionlive.com/eb?idx=2",
+                "p2026090300000000000a2", "b2026090300000000000b1",
+                TrackedPosts.MY_POST, now + 4 * day);
+        assert aged.size() == 1 : "3일 지난 첫 글은 빠진다";
+        assert aged.get(0).url.endsWith("idx=2");
+
+        // 상한 20개. 21번째가 들어오면 가장 오래 전에 등록된 것이 빠진다.
+        List<TrackedPosts.Tracked> many = new ArrayList<>();
+        for (int i = 0; i < 25; i++) {
+            many = TrackedPosts.add(many, "https://www.illusionlive.com/eb?idx=" + i,
+                    "p2026090300000000000a1", "b2026090300000000000b1",
+                    TrackedPosts.MY_POST, now + i);
+        }
+        assert many.size() == TrackedPosts.MAX : "상한 " + TrackedPosts.MAX + ", 실제 " + many.size();
+        assert many.get(0).url.endsWith("idx=24") : "가장 최근 등록이 앞";
+
+        // 확인 순서: 확인한 지 오래된 것부터, 최대 limit 개.
+        List<TrackedPosts.Tracked> queue = TrackedPosts.due(many, 8);
+        assert queue.size() == 8;
+        List<TrackedPosts.Tracked> after = TrackedPosts.markChecked(many, queue.get(0).url, now + 100);
+        assert TrackedPosts.due(after, 1).get(0).url.equals(queue.get(1).url)
+                : "방금 확인한 글은 뒤로 밀린다";
+
+        // 왕복 인코딩.
+        String encoded = TrackedPosts.encode(many);
+        List<TrackedPosts.Tracked> decoded = TrackedPosts.decode(encoded);
+        assert decoded.size() == many.size();
+        assert decoded.get(0).url.equals(many.get(0).url);
+        assert decoded.get(0).boardCode.equals(many.get(0).boardCode);
+        assert decoded.get(0).reason == many.get(0).reason;
+        assert TrackedPosts.decode("").isEmpty();
+        assert TrackedPosts.decode("깨진줄").isEmpty() : "필드 수가 안 맞으면 그 줄은 버린다";
+
+        // 형식이 틀린 코드는 애초에 들어가지 않는다.
+        List<TrackedPosts.Tracked> rejected = TrackedPosts.add(new ArrayList<TrackedPosts.Tracked>(),
+                "https://www.illusionlive.com/eb?idx=3", "p../../x", "b2026090300000000000b1",
+                TrackedPosts.MY_POST, now);
+        assert rejected.isEmpty() : "형식이 틀린 post_code 는 거부";
+
+        // http 링크는 저장하지 않는다. 알림을 눌렀을 때 여는 주소이기 때문이다.
+        List<TrackedPosts.Tracked> insecure = TrackedPosts.add(new ArrayList<TrackedPosts.Tracked>(),
+                "http://www.illusionlive.com/eb?idx=4", "p2026090300000000000a1",
+                "b2026090300000000000b1", TrackedPosts.MY_POST, now);
+        assert insecure.isEmpty() : "https 가 아니면 거부";
 
         System.out.println("SELF-TEST PASS");
     }

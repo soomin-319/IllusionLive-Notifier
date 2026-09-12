@@ -18,6 +18,7 @@ $sources = @(
     (Join-Path $src 'FeedParser.java'),
     (Join-Path $src 'MemberColors.java'),
     (Join-Path $src 'CommentParser.java'),
+    (Join-Path $src 'TrackedPosts.java'),
     (Join-Path $tests 'SelfTest.java')
 )
 & (Join-Path $jdk 'bin\javac.exe') --release 8 -encoding UTF-8 -Xlint:all -Werror -d $out @sources
