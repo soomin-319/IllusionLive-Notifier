@@ -50,9 +50,10 @@ $parser = Join-Path $input.FullName 'src\com\illusionlive\notifier\FeedParser.ja
 $colors = Join-Path $input.FullName 'src\com\illusionlive\notifier\MemberColors.java'
 $commentParser = Join-Path $input.FullName 'src\com\illusionlive\notifier\CommentParser.java'
 $trackedPosts = Join-Path $input.FullName 'src\com\illusionlive\notifier\TrackedPosts.java'
+$commentRules = Join-Path $input.FullName 'src\com\illusionlive\notifier\CommentRules.java'
 $selfTest = Join-Path $input.FullName 'tests\com\illusionlive\notifier\SelfTest.java'
 
-& $javac --release 8 -encoding UTF-8 -Xlint:all -Werror -d $testClasses.FullName $parser $colors $commentParser $trackedPosts $selfTest
+& $javac --release 8 -encoding UTF-8 -Xlint:all -Werror -d $testClasses.FullName $parser $colors $commentParser $trackedPosts $commentRules $selfTest
 Assert-Exit 'Parser test compile'
 & $java -ea -cp $testClasses.FullName com.illusionlive.notifier.SelfTest
 Assert-Exit 'Parser self-test'

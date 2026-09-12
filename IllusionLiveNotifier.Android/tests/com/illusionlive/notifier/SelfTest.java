@@ -6,7 +6,9 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 public final class SelfTest {
     public static void main(String[] args) throws Exception {
@@ -323,6 +325,51 @@ public final class SelfTest {
                 "http://www.illusionlive.com/eb?idx=4", "p2026090300000000000a1",
                 "b2026090300000000000b1", TrackedPosts.MY_POST, now);
         assert insecure.isEmpty() : "https 가 아니면 거부";
+
+        // ------------------------------------------------------------ 알림 규칙
+        List<CommentParser.Comment> thread = new ArrayList<>();
+        thread.add(new CommentParser.Comment("c1", "위즐리어카", "m1", "밑에 영상 링크가 잘못된 것 같아염"));
+        thread.add(new CommentParser.Comment("c2", "유메루", "m2", "이거 맞아염"));
+        thread.add(new CommentParser.Comment("c3", "현랑화", "m3", "앞으로도 즐겁고 행복한 활동 하길!"));
+        thread.add(new CommentParser.Comment("c4", "유메루", "m2", "앞으로도 잘 부탁해!!"));
+        Set<String> none = new HashSet<>();
+
+        // 내 댓글 바로 다음 한 건만.
+        List<CommentParser.Comment> mine = CommentRules.pick(
+                thread, none, "위즐리어카", TrackedPosts.MY_COMMENT, true, true);
+        assert mine.size() == 1 : "바로 다음 한 건, 실제 " + mine.size();
+        assert "c2".equals(mine.get(0).code);
+
+        List<CommentParser.Comment> hers = CommentRules.pick(
+                thread, none, "현랑화", TrackedPosts.MY_COMMENT, true, true);
+        assert hers.size() == 1 && "c4".equals(hers.get(0).code) : "c3 다음은 c4";
+
+        // 내 글이면 그 글의 새 댓글 전부. 단 내가 쓴 댓글은 빼고.
+        List<CommentParser.Comment> onMyPost = CommentRules.pick(
+                thread, none, "유메루", TrackedPosts.MY_POST, true, true);
+        assert onMyPost.size() == 2 : "내 댓글 두 개를 뺀 나머지, 실제 " + onMyPost.size();
+        assert "c1".equals(onMyPost.get(0).code) && "c3".equals(onMyPost.get(1).code);
+
+        // 이미 본 댓글은 다시 알리지 않는다.
+        Set<String> seenC2 = new HashSet<>(Arrays.asList("c2"));
+        assert CommentRules.pick(thread, seenC2, "위즐리어카",
+                TrackedPosts.MY_COMMENT, true, true).isEmpty() : "본 댓글은 제외";
+
+        // 스위치가 꺼져 있으면 그 사유는 아무것도 고르지 않는다.
+        assert CommentRules.pick(thread, none, "위즐리어카",
+                TrackedPosts.MY_COMMENT, true, false).isEmpty() : "스위치2 off";
+        assert CommentRules.pick(thread, none, "유메루",
+                TrackedPosts.MY_POST, false, true).isEmpty() : "스위치1 off";
+
+        // 두 사유가 겹쳐도 같은 댓글이 두 번 나오지 않는다.
+        List<CommentParser.Comment> both = CommentRules.pick(thread, none, "위즐리어카",
+                TrackedPosts.MY_POST | TrackedPosts.MY_COMMENT, true, true);
+        assert both.size() == 3 : "c2·c3·c4 세 건, 실제 " + both.size();
+        assert "c2".equals(both.get(0).code) && "c4".equals(both.get(2).code) : "순서 유지";
+
+        // 닉네임이 비어 있으면 아무것도 알리지 않는다.
+        assert CommentRules.pick(thread, none, "", TrackedPosts.MY_POST, true, true).isEmpty()
+                : "닉네임 없으면 기능 자체가 꺼진 상태";
 
         System.out.println("SELF-TEST PASS");
     }
