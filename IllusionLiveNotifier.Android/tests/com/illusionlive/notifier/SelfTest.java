@@ -225,6 +225,28 @@ public final class SelfTest {
                 "<input name=\"board_code\" value=\"p20260809213e43a4f8ac7\">").isEmpty()
                 : "접두 문자가 다르면 board_code 가 아니다";
 
+        // 댓글 폼 밖의 decoy 는 무시하고 폼 안의 정상 코드를 써야 한다
+        String pageWithDecoy =
+                "<div class=\"comment_textarea\">" +
+                "<input type=\"hidden\" name=\"post_code\" value=\"p20260101aaaaaaaaaaaaa\">" +
+                "<form id=\"comment_form\">" +
+                "<input type=\"hidden\" name=\"post_code\" value=\"p20260809213e43a4f8ac7\">" +
+                "<input type=\"hidden\" name=\"board_code\" value=\"b20260808bcd2709bb86e5\">" +
+                "</form></div>";
+        assert "p20260809213e43a4f8ac7".equals(CommentParser.postCode(pageWithDecoy))
+                : "폼 안의 코드를 써야 decoy 가 아니다";
+        assert "b20260808bcd2709bb86e5".equals(CommentParser.boardCode(pageWithDecoy))
+                : "폼 안의 코드를 써야 decoy 가 아니다";
+
+        // 댓글 폼이 없으면 코드가 있어도 빈 문자열을 돌려야 한다
+        String pageWithoutForm =
+                "<div><input type=\"hidden\" name=\"post_code\" value=\"p20260809213e43a4f8ac7\">" +
+                "<input type=\"hidden\" name=\"board_code\" value=\"b20260808bcd2709bb86e5\"></div>";
+        assert CommentParser.postCode(pageWithoutForm).isEmpty()
+                : "댓글 폼이 없으면 신뢰할 수 없다";
+        assert CommentParser.boardCode(pageWithoutForm).isEmpty()
+                : "댓글 폼이 없으면 신뢰할 수 없다";
+
         System.out.println("SELF-TEST PASS");
     }
 }

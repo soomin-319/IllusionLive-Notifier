@@ -31,6 +31,8 @@ final class CommentParser {
      *  물지 않는다. 마커가 없으면(마크업이 바뀌면) 블록 전체를 그대로 써서 오늘과 같은 동작으로
      *  물러난다. */
     private static final String BODY_END_MARKER = "class=\"tools";
+    /** 댓글 폼 ID. 숨은 입력 필드 코드는 이 폼 안에만 있으므로 이전 마크업의 decoy 를 피한다. */
+    private static final String FORM_MARKER = "id=\"comment_form\"";
     private static final Pattern POST_CODE = hidden("post_code");
     private static final Pattern BOARD_CODE = hidden("board_code");
 
@@ -76,7 +78,9 @@ final class CommentParser {
 
     private static String code(String pageHtml, Pattern pattern, char prefix) {
         if (pageHtml == null) return "";
-        Matcher matcher = pattern.matcher(pageHtml);
+        int formAt = pageHtml.indexOf(FORM_MARKER);
+        if (formAt < 0) return "";
+        Matcher matcher = pattern.matcher(pageHtml.substring(formAt));
         if (!matcher.find()) return "";
         String value = matcher.group(1);
         if (value.isEmpty() || value.charAt(0) != prefix) return "";
