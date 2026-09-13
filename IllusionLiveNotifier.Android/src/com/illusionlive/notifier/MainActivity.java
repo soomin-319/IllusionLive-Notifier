@@ -2,8 +2,10 @@ package com.illusionlive.notifier;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.ActivityNotFoundException;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
@@ -29,6 +31,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.PowerManager;
 import android.provider.Settings;
+import android.text.InputType;
 import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.MotionEvent;
@@ -40,6 +43,7 @@ import android.window.OnBackInvokedCallback;
 import android.window.OnBackInvokedDispatcher;
 import android.widget.BaseAdapter;
 import android.widget.CompoundButton;
+import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.ImageButton;
 import android.widget.ImageView;
@@ -517,6 +521,7 @@ public final class MainActivity extends Activity {
         backgroundCard.addView(batteryRow, batteryParams);
         bindBatteryRow();
         pane.addView(backgroundCard, matchWrap(dp(11)));
+        pane.addView(commentCard(preferences), matchWrap(dp(11)));
 
         pane.addView(sectionTitle("게시판별 알림"), matchWrap(dp(4)));
         TextView hint = text("체크한 게시판의 새 글만 알립니다. 변경은 바로 저장됩니다.", 12.5f);
@@ -574,6 +579,109 @@ public final class MainActivity extends Activity {
                 });
         row.setPadding(dp(14), dp(10), dp(14), dp(10));
         parent.addView(row, new LinearLayout.LayoutParams(-1, -2));
+    }
+
+    /** 닉네임 한 줄과 스위치 두 개. 닉네임이 비어 있으면 스위치는 꺼진 채 흐리게 보인다. */
+    private LinearLayout commentCard(final SharedPreferences preferences) {
+        LinearLayout card = bandCard();
+        final String nickname = CommentChecker.nickname(this);
+
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setPadding(dp(14), dp(12), dp(14), dp(12));
+        row.setBackground(ripple(SURFACE, 0, MUTED));
+        TextView label = text("닉네임", 15);
+        TextView value = text(nickname.isEmpty() ? "설정 안 함" : nickname, 15);
+        value.setTextColor(nickname.isEmpty() ? MUTED : FAINT);
+        value.setGravity(Gravity.END);
+        row.addView(label, new LinearLayout.LayoutParams(-2, -2));
+        row.addView(value, new LinearLayout.LayoutParams(0, -2, 1));
+        row.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View view) { askNickname(); }
+        });
+        card.addView(row, new LinearLayout.LayoutParams(-1, -2));
+
+        TextView hint = text("사이트에서 쓰는 닉네임과 정확히 같아야 합니다.", 12.5f);
+        hint.setTextColor(MUTED);
+        hint.setPadding(dp(14), 0, dp(14), dp(10));
+        card.addView(hint, new LinearLayout.LayoutParams(-1, -2));
+
+        card.addView(commentSwitch(preferences, "내 글에 달린 댓글",
+                CommentChecker.KEY_MY_POSTS, !nickname.isEmpty()),
+                new LinearLayout.LayoutParams(-1, -2));
+        card.addView(commentSwitch(preferences, "내 댓글에 달린 답",
+                CommentChecker.KEY_MY_REPLIES, !nickname.isEmpty()),
+                new LinearLayout.LayoutParams(-1, -2));
+        return card;
+    }
+
+    private Switch commentSwitch(final SharedPreferences preferences, String label,
+                                 final String key, boolean usable) {
+        Switch row = switchRow(label, 14, usable && preferences.getBoolean(key, false),
+                new CompoundButton.OnCheckedChangeListener() {
+                    @Override public void onCheckedChanged(CompoundButton view, boolean checked) {
+                        preferences.edit().putBoolean(key, checked).commit();
+                        if (checked) {
+                            CommentChecker.ensureNotificationChannel(MainActivity.this);
+                            requestNotificationPermission();
+                        }
+                    }
+                });
+        row.setPadding(dp(14), dp(10), dp(14), dp(10));
+        row.setEnabled(usable);
+        row.setAlpha(usable ? 1f : 0.4f);
+        return row;
+    }
+
+    /**
+     * 닉네임을 받는다. 최근 글과 이미 받아 둔 댓글 작성자 중에 없으면 한 번 되묻는다 —
+     * 오타를 그대로 저장하면 알림이 영영 오지 않고 원인도 드러나지 않는다. 되묻기만 하고 막지는
+     * 않는다. 글을 한 번도 쓰지 않은 사람은 목록에 없는 게 정상이기 때문이다.
+     */
+    private void askNickname() {
+        final EditText input = new EditText(this);
+        input.setSingleLine(true);
+        input.setInputType(InputType.TYPE_CLASS_TEXT);
+        input.setText(CommentChecker.nickname(this));
+        input.setSelection(input.getText().length());
+        int pad = dp(20);
+        input.setPadding(pad, dp(12), pad, dp(12));
+
+        new AlertDialog.Builder(this)
+                .setTitle("닉네임")
+                .setView(input)
+                .setNegativeButton("취소", null)
+                .setPositiveButton("저장", new DialogInterface.OnClickListener() {
+                    @Override public void onClick(DialogInterface dialog, int which) {
+                        final String value = input.getText().toString().trim();
+                        if (value.isEmpty() || CommentChecker.knownAuthor(MainActivity.this, value)) {
+                            saveNickname(value);
+                            return;
+                        }
+                        new AlertDialog.Builder(MainActivity.this)
+                                .setMessage("최근 글에서 '" + value + "' 을(를) 찾지 못했습니다.\n그대로 저장할까요?")
+                                .setNegativeButton("다시 입력", new DialogInterface.OnClickListener() {
+                                    @Override public void onClick(DialogInterface d, int w) { askNickname(); }
+                                })
+                                .setPositiveButton("저장", new DialogInterface.OnClickListener() {
+                                    @Override public void onClick(DialogInterface d, int w) {
+                                        saveNickname(value);
+                                    }
+                                })
+                                .show();
+                    }
+                })
+                .show();
+    }
+
+    /** 닉네임을 저장하고 설정 화면을 다시 그린다. 저장 후 닉네임이 있으면 두 스위치를 켠 것과 같으므로 알림 채널과 권한을 챙긴다. */
+    private void saveNickname(String value) {
+        CommentChecker.setNickname(this, value);
+        if (!CommentChecker.nickname(this).isEmpty()) {
+            CommentChecker.ensureNotificationChannel(this);
+            requestNotificationPermission();
+        }
+        showSettings();
     }
 
     // --------------------------------------------------------------- actions
