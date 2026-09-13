@@ -592,12 +592,12 @@ public final class MainActivity extends Activity {
         row.setBackground(ripple(SURFACE, 0, MUTED));
         TextView label = text("닉네임", 15);
         TextView value = text(nickname.isEmpty() ? "설정 안 함" : nickname, 15);
-        value.setTextColor(nickname.isEmpty() ? MUTED : FAINT);
+        value.setTextColor(nickname.isEmpty() ? FAINT : MUTED);
         value.setGravity(Gravity.END);
         row.addView(label, new LinearLayout.LayoutParams(-2, -2));
         row.addView(value, new LinearLayout.LayoutParams(0, -2, 1));
         row.setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View view) { askNickname(); }
+            @Override public void onClick(View view) { askNickname(CommentChecker.nickname(MainActivity.this)); }
         });
         card.addView(row, new LinearLayout.LayoutParams(-1, -2));
 
@@ -634,15 +634,15 @@ public final class MainActivity extends Activity {
     }
 
     /**
-     * 닉네임을 받는다. 최근 글과 이미 받아 둔 댓글 작성자 중에 없으면 한 번 되묻는다 —
+     * 닉네임을 받는다. 최근 글 작성자 중에 없으면 한 번 되묻는다 —
      * 오타를 그대로 저장하면 알림이 영영 오지 않고 원인도 드러나지 않는다. 되묻기만 하고 막지는
      * 않는다. 글을 한 번도 쓰지 않은 사람은 목록에 없는 게 정상이기 때문이다.
      */
-    private void askNickname() {
+    private void askNickname(final String initial) {
         final EditText input = new EditText(this);
         input.setSingleLine(true);
         input.setInputType(InputType.TYPE_CLASS_TEXT);
-        input.setText(CommentChecker.nickname(this));
+        input.setText(initial);
         input.setSelection(input.getText().length());
         int pad = dp(20);
         input.setPadding(pad, dp(12), pad, dp(12));
@@ -661,7 +661,7 @@ public final class MainActivity extends Activity {
                         new AlertDialog.Builder(MainActivity.this)
                                 .setMessage("최근 글에서 '" + value + "' 을(를) 찾지 못했습니다.\n그대로 저장할까요?")
                                 .setNegativeButton("다시 입력", new DialogInterface.OnClickListener() {
-                                    @Override public void onClick(DialogInterface d, int w) { askNickname(); }
+                                    @Override public void onClick(DialogInterface d, int w) { askNickname(value); }
                                 })
                                 .setPositiveButton("저장", new DialogInterface.OnClickListener() {
                                     @Override public void onClick(DialogInterface d, int w) {
