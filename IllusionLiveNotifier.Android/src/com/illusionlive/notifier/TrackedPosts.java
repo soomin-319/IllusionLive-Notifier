@@ -63,10 +63,7 @@ final class TrackedPosts {
      */
     static List<Tracked> add(List<Tracked> list, String url, String postCode, String boardCode,
                              int reason, long now) {
-        if (url == null || !url.startsWith("https://") || url.indexOf(UNIT) >= 0
-                || url.indexOf(RECORD) >= 0) return list;
-        if (!CODE.matcher(postCode).matches() || postCode.charAt(0) != 'p') return list;
-        if (!CODE.matcher(boardCode).matches() || boardCode.charAt(0) != 'b') return list;
+        if (!valid(url, postCode, boardCode)) return list;
 
         List<Tracked> next = new ArrayList<>();
         boolean merged = false;
@@ -82,6 +79,44 @@ final class TrackedPosts {
         // checked 를 0 으로 두면 새 글이 다음 사이클의 확인 대기열 맨 앞에 선다.
         if (!merged) next.add(new Tracked(url, postCode, boardCode, now, 0L, reason));
         return prune(next, now);
+    }
+
+    /**
+     * 재스캔 후보를 넣는다. {@code item.added} 에는 글 게시 시각을 넣는다 — 발견 스캔은 RSS 를
+     * 새 글부터 열기 때문에 연 시각을 쓰면 오래된 글이 최근 것처럼 보여 상한이 새 글부터 자른다.
+     * 같은 url 이 이미 있거나 값이 형식에 맞지 않으면 넣지 않는다. 어느 쪽이든 만료와 상한을
+     * 다시 적용한다.
+     */
+    static List<Tracked> addCandidate(List<Tracked> list, Tracked item, long now) {
+        List<Tracked> next = new ArrayList<>(list);
+        if (valid(item.url, item.postCode, item.boardCode) && !contains(list, item.url)) {
+            next.add(item);
+        }
+        return prune(next, now);
+    }
+
+    /** {@code list} 에서 {@code exclude} 에도 있는 url 을 뺀다. 순서는 그대로다. */
+    static List<Tracked> without(List<Tracked> list, List<Tracked> exclude) {
+        List<Tracked> next = new ArrayList<>();
+        for (Tracked item : list) {
+            if (!contains(exclude, item.url)) next.add(item);
+        }
+        return next;
+    }
+
+    static boolean contains(List<Tracked> list, String url) {
+        for (Tracked item : list) {
+            if (item.url.equals(url)) return true;
+        }
+        return false;
+    }
+
+    /** 여는 주소가 https 이고 저장 구분자가 섞일 수 없는 값만 받는다. */
+    private static boolean valid(String url, String postCode, String boardCode) {
+        return url != null && url.startsWith("https://")
+                && url.indexOf(UNIT) < 0 && url.indexOf(RECORD) < 0
+                && CODE.matcher(postCode).matches() && postCode.charAt(0) == 'p'
+                && CODE.matcher(boardCode).matches() && boardCode.charAt(0) == 'b';
     }
 
     /** 만료된 항목을 버리고 등록이 최근인 것부터 {@link #MAX} 개만 남긴다. */

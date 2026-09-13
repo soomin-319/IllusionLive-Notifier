@@ -39,6 +39,7 @@ final class CommentChecker {
     static final String KEY_TRACKED = "tracked_posts";
     static final String KEY_SEEN = "seen_comment_ids";
     static final String KEY_SCANNED = "scanned_posts";
+    static final String KEY_CANDIDATES = "comment_candidates";
 
     private static final int MAX_SEEN = 500;
     private static final int MAX_SCANNED = 200;
@@ -48,6 +49,13 @@ final class CommentChecker {
     private static final int SCAN_PER_CYCLE = 3;
     /** 한 사이클에 댓글을 다시 확인할 글 수. 추적 수와 무관하게 데이터 사용량을 묶는 상한이다. */
     private static final int CHECK_PER_CYCLE = 8;
+    /**
+     * 한 사이클에 내 댓글이 새로 달렸는지 다시 볼 후보 글 수. 댓글 목록만 받으므로 한 건에 약
+     * 7 KB 다. 후보는 {@link TrackedPosts#MAX} 개까지라 한 바퀴에 최대 10 사이클이 걸린다.
+     * ponytail: 후보가 TrackedPosts.MAX 를 같이 써서 게시가 최근인 20글(하루 12글 기준 약 1.7일)
+     * 까지만 다시 본다. 더 오래된 글까지 봐야 하면 prune 에 상한 인자를 더한다.
+     */
+    private static final int RESCAN_PER_CYCLE = 2;
     private static final int MAX_PAGE_BYTES = 1024 * 1024;
     private static final int MAX_COMMENT_BYTES = 256 * 1024;
     private static final String CHANNEL_ID = "new_comments";
@@ -105,7 +113,8 @@ final class CommentChecker {
                 .putString(KEY_NICKNAME, next)
                 .remove(KEY_TRACKED)
                 .remove(KEY_SEEN)
-                .remove(KEY_SCANNED);
+                .remove(KEY_SCANNED)
+                .remove(KEY_CANDIDATES);
         if (previous.isEmpty() && !next.isEmpty()) {
             editor.putBoolean(KEY_MY_POSTS, true).putBoolean(KEY_MY_REPLIES, true);
         }
@@ -250,8 +259,8 @@ final class CommentChecker {
     }
 
     /**
-     * RSS 처리가 끝난 뒤 같은 스레드에서 이어 돈다. 세 단계다 — 내 글 등록, 발견 스캔,
-     * 추적 재확인. 어느 단계가 네트워크 오류로 실패해도 나머지는 계속한다.
+     * RSS 처리가 끝난 뒤 같은 스레드에서 이어 돈다. 네 단계다 — 내 글 등록, 발견 스캔,
+     * 추적 재확인, 후보 재스캔. 어느 단계가 네트워크 오류로 실패해도 나머지는 계속한다.
      *
      * <p>{@code deadline} 은 {@link SystemClock#elapsedRealtime()} 기준 마감 시각이다. 각
      * 단계는 새 네트워크 요청을 시작하기 전에 이를 확인해, 지났으면 그 단계의 루프만 빠져나오고
@@ -272,12 +281,18 @@ final class CommentChecker {
                 TrackedPosts.decode(preferences.getString(KEY_TRACKED, ""));
         Set<String> scanned = stringSet(preferences, KEY_SCANNED);
         Set<String> seen = stringSet(preferences, KEY_SEEN);
+        List<TrackedPosts.Tracked> candidates =
+                TrackedPosts.decode(preferences.getString(KEY_CANDIDATES, ""));
+        List<TrackedPosts.Tracked> probed = new ArrayList<>();
         // 상한을 적용할 때 이번 사이클 것을 먼저 채우려면 무엇이 새로 들어왔는지 알아야 한다.
         Set<String> scannedBefore = new HashSet<>(scanned);
         Set<String> seenNow = new HashSet<>();
 
         if (myPosts) tracked = registerMyPosts(posts, tracked, scanned, nickname, now, deadline);
-        if (myReplies) tracked = discover(posts, tracked, scanned, nickname, now, deadline);
+        if (myReplies) tracked = discover(posts, tracked, scanned, probed, nickname, now, deadline);
+        for (TrackedPosts.Tracked probe : probed) {
+            candidates = TrackedPosts.addCandidate(candidates, probe, now);
+        }
 
         List<Hit> fresh = new ArrayList<>();
         for (TrackedPosts.Tracked post : TrackedPosts.due(tracked, CHECK_PER_CYCLE)) {
@@ -307,6 +322,36 @@ final class CommentChecker {
             }
         }
 
+        // 이미 한 번 연 글에 내 댓글이 새로 달렸는지 본다. 재확인 루프 뒤에 둔다 - pick 은 사이클
+        // 전의 seen 을 읽으므로 한 사이클에 같은 글을 두 번 보면 같은 답을 두 번 알린다.
+        if (myReplies) {
+            for (TrackedPosts.Tracked candidate :
+                    TrackedPosts.due(TrackedPosts.without(candidates, tracked), RESCAN_PER_CYCLE)) {
+                if (SystemClock.elapsedRealtime() >= deadline) break;
+                // 받기 전에 확인 처리한다. 계속 실패하는 글이 대기열 맨 앞에 박혀 자리를 먹지 않게.
+                candidates = TrackedPosts.markChecked(candidates, candidate.url, now);
+                List<CommentParser.Comment> comments;
+                try {
+                    comments = CommentParser.parseComments(fetchComments(candidate));
+                } catch (Exception ignored) {
+                    continue;
+                }
+                if (!mine(comments, nickname)) continue;
+
+                // 방금 단 댓글이다. 기준점으로만 남기면 그 사이 달린 답을 삼키므로 확인한 것으로
+                // 두고 지금 알린다. 한 바퀴 안에 찾으므로 그 답은 오래된 것이 아니다.
+                tracked = TrackedPosts.add(tracked, candidate.url, candidate.postCode,
+                        candidate.boardCode, TrackedPosts.MY_COMMENT, now);
+                tracked = TrackedPosts.markChecked(tracked, candidate.url, now);
+                String postTitle = title(context, candidate.url);
+                for (CommentParser.Comment comment : CommentRules.pick(
+                        comments, seen, nickname, TrackedPosts.MY_COMMENT, myPosts, myReplies)) {
+                    fresh.add(new Hit(comment, candidate.url, postTitle));
+                }
+                for (CommentParser.Comment comment : comments) seenNow.add(comment.code);
+            }
+        }
+
         Set<String> scannedNow = new HashSet<>(scanned);
         scannedNow.removeAll(scannedBefore);
 
@@ -315,6 +360,7 @@ final class CommentChecker {
             if (!nickname.equals(nickname(context))) return;
             preferences.edit()
                     .putString(KEY_TRACKED, TrackedPosts.encode(tracked))
+                    .putString(KEY_CANDIDATES, TrackedPosts.encode(TrackedPosts.prune(candidates, now)))
                     .putStringSet(KEY_SCANNED, capped(scannedNow, scannedBefore, MAX_SCANNED))
                     .putStringSet(KEY_SEEN, capped(seenNow, seen, MAX_SEEN))
                     .commit();
@@ -336,7 +382,7 @@ final class CommentChecker {
         for (FeedParser.Post post : posts) {
             if (budget <= 0) break;
             if (!nickname.equals(post.author)) continue;
-            if (scanned.contains(post.id) || contains(tracked, post.url)) continue;
+            if (scanned.contains(post.id) || TrackedPosts.contains(tracked, post.url)) continue;
             if (outsideWindow(post, now)) continue;
             // 예산 소진 - 아직 scanned 에 넣지 않았으니 다음 사이클에 그대로 다시 시도된다.
             if (SystemClock.elapsedRealtime() >= deadline) break;
@@ -360,15 +406,17 @@ final class CommentChecker {
 
     /**
      * 아직 안 본 글을 사이클당 {@link #SCAN_PER_CYCLE} 개까지 열어, 내 댓글이 있으면 추적에
-     * 넣는다. 있든 없든 {@link #KEY_SCANNED} 에 적어 두 번 열지 않는다.
+     * 넣는다. 있든 없든 {@link #KEY_SCANNED} 에 적어 두 번 열지 않는다. 댓글 목록까지 받은 글은
+     * {@code probed} 에 담아 재스캔 후보로 넘긴다.
      */
     private static List<TrackedPosts.Tracked> discover(
             List<FeedParser.Post> posts, List<TrackedPosts.Tracked> tracked,
-            Set<String> scanned, String nickname, long now, long deadline) {
+            Set<String> scanned, List<TrackedPosts.Tracked> probed, String nickname,
+            long now, long deadline) {
         int budget = SCAN_PER_CYCLE;
         for (FeedParser.Post post : posts) {
             if (budget <= 0) break;
-            if (scanned.contains(post.id) || contains(tracked, post.url)) continue;
+            if (scanned.contains(post.id) || TrackedPosts.contains(tracked, post.url)) continue;
             if (outsideWindow(post, now)) continue;
             // 예산 소진 - 아직 scanned 에 넣지 않았으니 다음 사이클에 그대로 다시 시도된다.
             if (SystemClock.elapsedRealtime() >= deadline) break;
@@ -392,26 +440,29 @@ final class CommentChecker {
                 scanned.remove(post.id);
                 break;
             }
-            TrackedPosts.Tracked probe =
-                    new TrackedPosts.Tracked(post.url, postCode, boardCode, now, 0L, 0);
+            // added 는 게시 시각이다. 재스캔 후보의 만료와 상한이 게시 시각을 기준으로 걸린다.
+            TrackedPosts.Tracked probe = new TrackedPosts.Tracked(post.url, postCode, boardCode,
+                    post.published > 0 ? post.published : now, now, 0);
+            List<CommentParser.Comment> comments;
             try {
-                for (CommentParser.Comment comment : CommentParser.parseComments(fetchComments(probe))) {
-                    if (nickname.equals(comment.author)) {
-                        tracked = TrackedPosts.add(tracked, post.url, postCode, boardCode,
-                                TrackedPosts.MY_COMMENT, now);
-                        break;
-                    }
-                }
+                comments = CommentParser.parseComments(fetchComments(probe));
             } catch (Exception ignored) {
-                scanned.remove(post.id);
+                scanned.remove(post.id); // 실패한 글은 다음 사이클에 다시 시도한다
+                continue;
+            }
+            probed.add(probe);
+            if (mine(comments, nickname)) {
+                tracked = TrackedPosts.add(tracked, post.url, postCode, boardCode,
+                        TrackedPosts.MY_COMMENT, now);
             }
         }
         return tracked;
     }
 
-    private static boolean contains(List<TrackedPosts.Tracked> tracked, String url) {
-        for (TrackedPosts.Tracked item : tracked) {
-            if (item.url.equals(url)) return true;
+    /** 목록에 이 닉네임으로 쓴 댓글이 있는지. */
+    private static boolean mine(List<CommentParser.Comment> comments, String nickname) {
+        for (CommentParser.Comment comment : comments) {
+            if (nickname.equals(comment.author)) return true;
         }
         return false;
     }

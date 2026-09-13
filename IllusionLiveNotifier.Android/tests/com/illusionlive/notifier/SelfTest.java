@@ -326,6 +326,50 @@ public final class SelfTest {
                 "b2026090300000000000b1", TrackedPosts.MY_POST, now);
         assert insecure.isEmpty() : "https 가 아니면 거부";
 
+        // ---------------------------------------------------------- 재스캔 후보
+        // 발견 스캔은 RSS 를 새 글부터 연다. added 에 게시 시각을 넣으므로 오래된 글이 나중에
+        // 들어와도 상한은 게시가 가장 이른 글부터 자른다.
+        List<TrackedPosts.Tracked> candidates = new ArrayList<>();
+        for (int i = 24; i >= 0; i--) {
+            candidates = TrackedPosts.addCandidate(candidates, new TrackedPosts.Tracked(
+                    "https://www.illusionlive.com/eb?idx=" + i,
+                    "p2026090300000000000a1", "b2026090300000000000b1",
+                    now - day + i, now, 0), now);
+        }
+        assert candidates.size() == TrackedPosts.MAX
+                : "후보 상한 " + TrackedPosts.MAX + ", 실제 " + candidates.size();
+        assert candidates.get(0).url.endsWith("idx=24") : "게시가 가장 최근인 글이 앞";
+        assert !TrackedPosts.contains(candidates, "https://www.illusionlive.com/eb?idx=4")
+                : "게시가 가장 이른 글부터 잘린다";
+        assert TrackedPosts.contains(candidates, "https://www.illusionlive.com/eb?idx=5");
+
+        // 같은 url 은 한 번만 들어가고 먼저 있던 값이 남는다.
+        List<TrackedPosts.Tracked> again = TrackedPosts.addCandidate(candidates,
+                new TrackedPosts.Tracked("https://www.illusionlive.com/eb?idx=24",
+                        "p2026090300000000000a1", "b2026090300000000000b1", now, now + 5, 0), now);
+        assert again.size() == candidates.size() : "같은 url 은 늘지 않는다";
+        assert again.get(0).checked == now : "먼저 있던 항목이 그대로 남는다";
+
+        // 게시한 지 3일이 지난 글과 형식이 틀린 코드는 후보가 되지 않는다.
+        assert TrackedPosts.addCandidate(new ArrayList<TrackedPosts.Tracked>(),
+                new TrackedPosts.Tracked("https://www.illusionlive.com/eb?idx=30",
+                        "p2026090300000000000a1", "b2026090300000000000b1",
+                        now - 4 * day, now, 0), now).isEmpty()
+                : "게시 3일이 지난 글은 후보가 아니다";
+        assert TrackedPosts.addCandidate(new ArrayList<TrackedPosts.Tracked>(),
+                new TrackedPosts.Tracked("https://www.illusionlive.com/eb?idx=31",
+                        "b2026090300000000000b1", "p2026090300000000000a1", now, now, 0), now).isEmpty()
+                : "postCode/boardCode 가 뒤바뀐 후보는 거부";
+
+        // 이미 추적 중인 글은 재스캔 대상에서 빠진다.
+        List<TrackedPosts.Tracked> watching = TrackedPosts.add(new ArrayList<TrackedPosts.Tracked>(),
+                "https://www.illusionlive.com/eb?idx=24", "p2026090300000000000a1",
+                "b2026090300000000000b1", TrackedPosts.MY_COMMENT, now);
+        List<TrackedPosts.Tracked> rest = TrackedPosts.without(candidates, watching);
+        assert rest.size() == candidates.size() - 1 : "추적 중인 글 하나만 빠진다";
+        assert !TrackedPosts.contains(rest, "https://www.illusionlive.com/eb?idx=24");
+        assert TrackedPosts.contains(rest, "https://www.illusionlive.com/eb?idx=23");
+
         // ------------------------------------------------------------ 알림 규칙
         List<CommentParser.Comment> thread = new ArrayList<>();
         thread.add(new CommentParser.Comment("c1", "위즐리어카", "m1", "밑에 영상 링크가 잘못된 것 같아염"));
