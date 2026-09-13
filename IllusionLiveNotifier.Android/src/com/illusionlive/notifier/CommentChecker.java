@@ -1,7 +1,16 @@
 package com.illusionlive.notifier;
 
+import android.Manifest;
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.content.Context;
+import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
+import android.net.Uri;
+import android.os.Build;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -40,6 +49,9 @@ final class CommentChecker {
     private static final int CHECK_PER_CYCLE = 8;
     private static final int MAX_PAGE_BYTES = 1024 * 1024;
     private static final int MAX_COMMENT_BYTES = 256 * 1024;
+    private static final String CHANNEL_ID = "new_comments";
+    /** 여러 건을 묶을 때 쓰는 고정 id. 글 알림의 8702 와 겹치지 않게 둔다. */
+    private static final int SUMMARY_ID = 8703;
 
     private CommentChecker() {}
 
@@ -58,6 +70,15 @@ final class CommentChecker {
     static boolean enabled(Context context) {
         return !nickname(context).isEmpty()
                 && (myPostsEnabled(context) || myRepliesEnabled(context));
+    }
+
+    static void ensureNotificationChannel(Context context) {
+        NotificationManager manager =
+                (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+        NotificationChannel channel = new NotificationChannel(
+                CHANNEL_ID, "댓글 알림", NotificationManager.IMPORTANCE_HIGH);
+        channel.setDescription("내 글에 달린 댓글과 내 댓글에 달린 답");
+        manager.createNotificationChannel(channel);
     }
 
     /**
@@ -366,10 +387,57 @@ final class CommentChecker {
     }
 
     /**
-     * 자리표시자 — 실제 알림 발송(채널 생성, 문구 구성)은 다음 작업에서 채운다. {@link #run} 이
-     * 이 심볼을 이미 참조하므로, 본문 없이 두면 이 파일 자체가 컴파일되지 않는다.
-     * ponytail: 다음 작업이 이 본문을 Notification.Builder 구현으로 교체한다.
+     * 새 댓글을 알림으로 보낸다. 한 건이면 글을 열 링크를, 여러 건이면 메인을 링크한다.
+     * 권한이 없거나 Android 13+ 에서 알림 권한이 거절되면 이 함수를 호출하지 않는다.
      */
     private static void notifyComments(Context context, List<Hit> hits) {
+        if (Build.VERSION.SDK_INT >= 33 && context.checkSelfPermission(
+                Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return;
+
+        ensureNotificationChannel(context);
+        NotificationManager manager =
+                (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+
+        Intent intent;
+        String title;
+        String text;
+        int notificationId;
+        if (hits.size() == 1) {
+            Hit hit = hits.get(0);
+            intent = new Intent(Intent.ACTION_VIEW, Uri.parse(hit.postUrl));
+            title = hit.comment.author + " 님의 댓글";
+            text = hit.postTitle.isEmpty()
+                    ? hit.comment.body
+                    : hit.comment.body + " · " + hit.postTitle;
+            notificationId = hit.comment.code.hashCode();
+        } else {
+            intent = new Intent(context, MainActivity.class);
+            title = "새 댓글 " + hits.size() + "개";
+            text = hits.get(0).comment.author + " 외 " + (hits.size() - 1) + "명";
+            notificationId = SUMMARY_ID;
+        }
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        PendingIntent pendingIntent = PendingIntent.getActivity(context, notificationId, intent,
+                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+
+        Notification.Builder builder = new Notification.Builder(context, CHANNEL_ID)
+                .setSmallIcon(android.R.drawable.ic_dialog_email)
+                .setContentTitle(title)
+                .setContentText(text)
+                .setContentIntent(pendingIntent)
+                .setAutoCancel(true)
+                .setCategory(Notification.CATEGORY_SOCIAL);
+        if (hits.size() > 1) {
+            Notification.InboxStyle style = new Notification.InboxStyle();
+            for (int i = 0; i < Math.min(5, hits.size()); i++) {
+                Hit hit = hits.get(i);
+                style.addLine(hit.comment.author + ": " + hit.comment.body);
+            }
+            if (hits.size() > 5) style.setSummaryText("외 " + (hits.size() - 5) + "개");
+            builder.setStyle(style).setNumber(hits.size());
+        } else {
+            builder.setStyle(new Notification.BigTextStyle().bigText(text));
+        }
+        manager.notify(notificationId, builder.build());
     }
 }
