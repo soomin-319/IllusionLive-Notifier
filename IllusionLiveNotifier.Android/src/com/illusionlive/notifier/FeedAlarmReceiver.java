@@ -44,7 +44,7 @@ public final class FeedAlarmReceiver extends BroadcastReceiver {
         if (!isCheck || !FeedChecker.backgroundEnabled(app)) return;
 
         final PendingResult done = goAsync();
-        FeedChecker.check(app, true, new FeedChecker.Listener() {
+        FeedChecker.check(app, true, true, new FeedChecker.Listener() {
             @Override public void onComplete(FeedChecker.Result result) { done.finish(); }
         });
     }

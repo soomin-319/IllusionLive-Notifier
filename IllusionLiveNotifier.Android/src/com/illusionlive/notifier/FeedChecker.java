@@ -11,6 +11,7 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
+import android.os.SystemClock;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -49,6 +50,9 @@ final class FeedChecker {
     private static final int MAX_CACHED_POSTS = 200;
     private static final String CHANNEL_ID = "new_posts";
     private static final int MAX_FEED_BYTES = 2 * 1024 * 1024;
+    // setAndAllowWhileIdle 알람은 Doze 상태에서 네트워크 허용 시간을 대략 10초만 받는다. 댓글
+    // 확인 단계를 그 안에서 끝내야 goAsync() 로 늘린 브로드캐스트 처리 제한 안에도 넉넉히 든다.
+    private static final long COMMENT_BUDGET_MS = 10_000L;
     private static final ExecutorService EXECUTOR = Executors.newSingleThreadExecutor();
     private static final AtomicBoolean RUNNING = new AtomicBoolean();
 
@@ -103,6 +107,17 @@ final class FeedChecker {
     }
 
     static void check(Context context, boolean sendNotifications, Listener listener) {
+        check(context, sendNotifications, false, listener);
+    }
+
+    /**
+     * {@code waitForComments} 가 false 면(당겨서 새로고침) 목록 결과를 먼저 넘기고 댓글 확인은
+     * 같은 스레드에서 뒤이어 돈다 — 화면이 최대 17건에 이르는 댓글 네트워크 요청을 기다리지
+     * 않는다. true 면(알람) 댓글 확인까지 끝난 뒤에 넘긴다 — goAsync() 로 받은 브로드캐스트가
+     * 끝나 done.finish() 가 불리고 나면 프로세스가 그 사이 죽을 수 있어, 그 전에 끝내야 한다.
+     */
+    static void check(Context context, boolean sendNotifications, boolean waitForComments,
+                       Listener listener) {
         final Context app = context.getApplicationContext();
         if (!RUNNING.compareAndSet(false, true)) {
             deliver(listener, new Result(Collections.<FeedParser.Post>emptyList(), 0, 0,
@@ -112,18 +127,32 @@ final class FeedChecker {
 
         EXECUTOR.execute(new Runnable() {
             @Override public void run() {
+                // RSS 요청 전부터 재야 그 시간도 댓글 확인이 쓸 수 있는 예산에서 빠진다.
+                long deadline = SystemClock.elapsedRealtime() + COMMENT_BUDGET_MS;
                 Result result;
                 try {
-                    List<FeedParser.Post> posts = fetch();
-                    result = process(app, posts, sendNotifications);
-                } catch (Exception error) {
-                    prefs(app).edit().putString("last_error", message(error)).commit();
-                    result = new Result(Collections.<FeedParser.Post>emptyList(), 0, 0,
-                            false, false, message(error));
+                    try {
+                        List<FeedParser.Post> posts = fetch();
+                        result = process(app, posts, sendNotifications);
+                    } catch (Exception error) {
+                        prefs(app).edit().putString("last_error", message(error)).commit();
+                        result = new Result(Collections.<FeedParser.Post>emptyList(), 0, 0,
+                                false, false, message(error));
+                    }
+
+                    if (!waitForComments) deliver(listener, result);
+
+                    try {
+                        // 댓글 확인 실패가 이미 성공한 피드 폴링 결과를 오류로 바꿔서는 안 된다.
+                        if (result.error == null) {
+                            CommentChecker.run(app, result.posts, sendNotifications, deadline);
+                        }
+                    } catch (Exception ignored) {
+                    }
                 } finally {
                     RUNNING.set(false);
                 }
-                deliver(listener, result);
+                if (waitForComments) deliver(listener, result);
             }
         });
     }

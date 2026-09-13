@@ -11,6 +11,7 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
+import android.os.SystemClock;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -123,8 +124,10 @@ final class CommentChecker {
 
     private static String get(String url, int limit) throws IOException {
         HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
-        connection.setConnectTimeout(15_000);
-        connection.setReadTimeout(20_000);
+        // 댓글 단계는 마감 시각 안에서 돈다. 요청 하나가 멈춰 서서 마감을 크게 넘기지 않게
+        // RSS 요청보다 짧게 잡는다.
+        connection.setConnectTimeout(5_000);
+        connection.setReadTimeout(8_000);
         connection.setInstanceFollowRedirects(true);
         connection.setRequestProperty("User-Agent",
                 "IllusionLiveNotifier-Android/1.0 (+https://www.illusionlive.com)");
@@ -146,8 +149,10 @@ final class CommentChecker {
                 + "&post_code=" + URLEncoder.encode(post.postCode, "UTF-8")
                 + "&current_page=1";
         HttpURLConnection connection = (HttpURLConnection) new URL(COMMENT_URL).openConnection();
-        connection.setConnectTimeout(15_000);
-        connection.setReadTimeout(20_000);
+        // 댓글 단계는 마감 시각 안에서 돈다. 요청 하나가 멈춰 서서 마감을 크게 넘기지 않게
+        // RSS 요청보다 짧게 잡는다.
+        connection.setConnectTimeout(5_000);
+        connection.setReadTimeout(8_000);
         connection.setDoOutput(true);
         connection.setRequestMethod("POST");
         connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
@@ -239,8 +244,14 @@ final class CommentChecker {
     /**
      * RSS 처리가 끝난 뒤 같은 스레드에서 이어 돈다. 세 단계다 — 내 글 등록, 발견 스캔,
      * 추적 재확인. 어느 단계가 네트워크 오류로 실패해도 나머지는 계속한다.
+     *
+     * <p>{@code deadline} 은 {@link SystemClock#elapsedRealtime()} 기준 마감 시각이다. 각
+     * 단계는 새 네트워크 요청을 시작하기 전에 이를 확인해, 지났으면 그 단계의 루프만 빠져나오고
+     * 남은 항목은 다음 사이클로 미룬다. 어느 시점에 멈추든 마지막의 단 한 번뿐인 commit 은 그대로
+     * 실행되어 이번 사이클에 모은 것은 전부 저장된다.
      */
-    static void run(Context context, List<FeedParser.Post> posts, boolean sendNotifications) {
+    static void run(Context context, List<FeedParser.Post> posts, boolean sendNotifications,
+                     long deadline) {
         if (!enabled(context)) return;
 
         SharedPreferences preferences = FeedChecker.prefs(context);
@@ -257,11 +268,13 @@ final class CommentChecker {
         Set<String> scannedBefore = new HashSet<>(scanned);
         Set<String> seenNow = new HashSet<>();
 
-        if (myPosts) tracked = registerMyPosts(posts, tracked, scanned, nickname, now);
-        if (myReplies) tracked = discover(posts, tracked, scanned, nickname, now);
+        if (myPosts) tracked = registerMyPosts(posts, tracked, scanned, nickname, now, deadline);
+        if (myReplies) tracked = discover(posts, tracked, scanned, nickname, now, deadline);
 
         List<Hit> fresh = new ArrayList<>();
         for (TrackedPosts.Tracked post : TrackedPosts.due(tracked, CHECK_PER_CYCLE)) {
+            // 예산 소진 - checked 를 건드리지 않으므로 이 글은 다음 사이클 대기열 앞쪽에 남는다.
+            if (SystemClock.elapsedRealtime() >= deadline) break;
             List<CommentParser.Comment> comments;
             try {
                 comments = CommentParser.parseComments(fetchComments(post));
@@ -306,13 +319,15 @@ final class CommentChecker {
      */
     private static List<TrackedPosts.Tracked> registerMyPosts(
             List<FeedParser.Post> posts, List<TrackedPosts.Tracked> tracked,
-            Set<String> scanned, String nickname, long now) {
+            Set<String> scanned, String nickname, long now, long deadline) {
         int budget = SCAN_PER_CYCLE;
         for (FeedParser.Post post : posts) {
             if (budget <= 0) break;
             if (!nickname.equals(post.author)) continue;
             if (scanned.contains(post.id) || contains(tracked, post.url)) continue;
             if (outsideWindow(post, now)) continue;
+            // 예산 소진 - 아직 scanned 에 넣지 않았으니 다음 사이클에 그대로 다시 시도된다.
+            if (SystemClock.elapsedRealtime() >= deadline) break;
             budget--;
 
             String page;
@@ -337,12 +352,14 @@ final class CommentChecker {
      */
     private static List<TrackedPosts.Tracked> discover(
             List<FeedParser.Post> posts, List<TrackedPosts.Tracked> tracked,
-            Set<String> scanned, String nickname, long now) {
+            Set<String> scanned, String nickname, long now, long deadline) {
         int budget = SCAN_PER_CYCLE;
         for (FeedParser.Post post : posts) {
             if (budget <= 0) break;
             if (scanned.contains(post.id) || contains(tracked, post.url)) continue;
             if (outsideWindow(post, now)) continue;
+            // 예산 소진 - 아직 scanned 에 넣지 않았으니 다음 사이클에 그대로 다시 시도된다.
+            if (SystemClock.elapsedRealtime() >= deadline) break;
             budget--;
             scanned.add(post.id);
 
@@ -357,6 +374,12 @@ final class CommentChecker {
             String boardCode = CommentParser.boardCode(page);
             if (postCode.isEmpty() || boardCode.isEmpty()) continue;
 
+            // 예산 소진 - 페이지는 받았지만 아직 댓글을 못 봤으니 scanned 표시를 되돌려 다음
+            // 사이클에 이 글을 처음부터 다시 스캔한다.
+            if (SystemClock.elapsedRealtime() >= deadline) {
+                scanned.remove(post.id);
+                break;
+            }
             TrackedPosts.Tracked probe =
                     new TrackedPosts.Tracked(post.url, postCode, boardCode, now, 0L, 0);
             try {
