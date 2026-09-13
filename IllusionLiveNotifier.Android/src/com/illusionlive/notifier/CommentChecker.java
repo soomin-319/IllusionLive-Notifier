@@ -29,7 +29,6 @@ final class CommentChecker {
     static final String KEY_TRACKED = "tracked_posts";
     static final String KEY_SEEN = "seen_comment_ids";
     static final String KEY_SCANNED = "scanned_posts";
-    static final String KEY_INITIALIZED = "comments_initialized";
 
     private static final int MAX_SEEN = 500;
     private static final int MAX_SCANNED = 200;
@@ -76,8 +75,7 @@ final class CommentChecker {
                 .putString(KEY_NICKNAME, next)
                 .remove(KEY_TRACKED)
                 .remove(KEY_SEEN)
-                .remove(KEY_SCANNED)
-                .putBoolean(KEY_INITIALIZED, false);
+                .remove(KEY_SCANNED);
         if (previous.isEmpty() && !next.isEmpty()) {
             editor.putBoolean(KEY_MY_POSTS, true).putBoolean(KEY_MY_REPLIES, true);
         }
@@ -228,7 +226,6 @@ final class CommentChecker {
         String nickname = nickname(context);
         boolean myPosts = myPostsEnabled(context);
         boolean myReplies = myRepliesEnabled(context);
-        boolean initialized = preferences.getBoolean(KEY_INITIALIZED, false);
         long now = System.currentTimeMillis();
 
         List<TrackedPosts.Tracked> tracked =
@@ -258,8 +255,10 @@ final class CommentChecker {
             // 고른 뒤에 기록한다. 순서가 바뀌면 이번에 알릴 것까지 본 것으로 표시된다.
             for (CommentParser.Comment comment : comments) seenNow.add(comment.code);
 
-            // 첫 시딩에서는 기준점만 잡고 알리지 않는다.
-            if (!initialized) continue;
+            // 이 글을 처음 확인하는 사이클엔 지금 댓글을 기준점으로만 남기고 알리지 않는다.
+            // post 는 markChecked 이전 값이라 checked 는 이번 사이클 전 상태 그대로다. 사이클당
+            // CHECK_PER_CYCLE 개만 확인하므로 전역 플래그 하나로는 이 시점을 글마다 판단할 수 없다.
+            if (post.checked == 0) continue;
             String postTitle = title(context, post.url);
             for (CommentParser.Comment comment : picked) {
                 fresh.add(new Hit(comment, post.url, postTitle));
@@ -273,21 +272,40 @@ final class CommentChecker {
                 .putString(KEY_TRACKED, TrackedPosts.encode(tracked))
                 .putStringSet(KEY_SCANNED, capped(scannedNow, scannedBefore, MAX_SCANNED))
                 .putStringSet(KEY_SEEN, capped(seenNow, seen, MAX_SEEN))
-                .putBoolean(KEY_INITIALIZED, true)
                 .commit();
 
         if (sendNotifications && !fresh.isEmpty()) notifyComments(context, fresh);
     }
 
-    /** RSS 에서 내가 쓴 글을 골라 추적에 넣는다. 두 코드를 얻으려 글 페이지를 한 번 받는다. */
+    /**
+     * RSS 에서 내가 쓴 글을 사이클당 {@link #SCAN_PER_CYCLE} 개까지 열어 추적에 넣는다. 두 코드를
+     * 얻으려 글 페이지를 한 번 받는다. 예산이 없으면 discover 와 마찬가지로 다음 사이클로 미룬다 —
+     * 그렇지 않으면 아직 추적에 안 들어간 글을 사이클마다 다시 받아 상한(prune)에 밀려난 오래된
+     * 추적 글을 계속 몰아낸다.
+     */
     private static List<TrackedPosts.Tracked> registerMyPosts(
             List<FeedParser.Post> posts, List<TrackedPosts.Tracked> tracked,
             Set<String> scanned, String nickname, long now) {
+        int budget = SCAN_PER_CYCLE;
         for (FeedParser.Post post : posts) {
+            if (budget <= 0) break;
             if (!nickname.equals(post.author)) continue;
-            if (contains(tracked, post.url)) continue;
-            tracked = withCodes(tracked, post.url, TrackedPosts.MY_POST, now);
-            scanned.add(post.id); // 내 글은 발견 스캔이 다시 열어 볼 필요가 없다
+            if (scanned.contains(post.id) || contains(tracked, post.url)) continue;
+            if (outsideWindow(post, now)) continue;
+            budget--;
+
+            String page;
+            try {
+                page = get(post.url, MAX_PAGE_BYTES);
+            } catch (Exception ignored) {
+                continue; // scanned 에 남기지 않아 다음 사이클 예산 안에서 다시 시도한다
+            }
+            // 댓글이 막힌 게시판처럼 코드가 안 나와도 페이지를 받은 이상 다시 열 필요가 없다.
+            // 여기서 표시하지 않으면 그런 글을 사이클마다 다시 받는다.
+            scanned.add(post.id);
+            tracked = TrackedPosts.add(tracked, post.url,
+                    CommentParser.postCode(page), CommentParser.boardCode(page),
+                    TrackedPosts.MY_POST, now);
         }
         return tracked;
     }
@@ -303,6 +321,7 @@ final class CommentChecker {
         for (FeedParser.Post post : posts) {
             if (budget <= 0) break;
             if (scanned.contains(post.id) || contains(tracked, post.url)) continue;
+            if (outsideWindow(post, now)) continue;
             budget--;
             scanned.add(post.id);
 
@@ -334,23 +353,16 @@ final class CommentChecker {
         return tracked;
     }
 
-    /** 글 페이지에서 두 코드를 받아 추적에 넣는다. 실패하면 목록을 그대로 돌려준다. */
-    private static List<TrackedPosts.Tracked> withCodes(
-            List<TrackedPosts.Tracked> tracked, String url, int reason, long now) {
-        try {
-            String page = get(url, MAX_PAGE_BYTES);
-            return TrackedPosts.add(tracked, url,
-                    CommentParser.postCode(page), CommentParser.boardCode(page), reason, now);
-        } catch (Exception ignored) {
-            return tracked;
-        }
-    }
-
     private static boolean contains(List<TrackedPosts.Tracked> tracked, String url) {
         for (TrackedPosts.Tracked item : tracked) {
             if (item.url.equals(url)) return true;
         }
         return false;
+    }
+
+    /** 날짜를 읽지 못한 글(0)은 창 안에 있는 것으로 본다. */
+    private static boolean outsideWindow(FeedParser.Post post, long now) {
+        return post.published > 0 && now - post.published >= TrackedPosts.TTL_MS;
     }
 
     /**
