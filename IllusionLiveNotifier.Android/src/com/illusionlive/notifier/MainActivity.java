@@ -709,7 +709,12 @@ public final class MainActivity extends Activity {
                         refreshing = false;
                         progress.animate().cancel();
                         progress.setVisibility(View.GONE);
-                        if (result.busy) return;
+                        if (result.busy) {
+                            // 댓글 확인 단계가 RUNNING 을 붙잡고 있는 동안 들어온 새로고침이다.
+                            // process() 가 이미 캐시를 커밋해 뒀으니 그것만이라도 다시 보여준다.
+                            adapter.setPosts(FeedChecker.cachedPosts(MainActivity.this));
+                            return;
+                        }
                         if (result.error != null) {
                             // The cached list stays on screen; only say the refresh failed.
                             toast("확인 실패 · " + result.error);

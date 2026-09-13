@@ -87,7 +87,7 @@ final class CommentChecker {
      * 이전 닉네임 기준으로 고른 글에서 엉뚱한 알림이 나간다. 처음 저장하는 경우에는 두 스위치를
      * 켜 준다.
      */
-    static void setNickname(Context context, String value) {
+    static synchronized void setNickname(Context context, String value) {
         SharedPreferences preferences = FeedChecker.prefs(context);
         String next = value == null ? "" : value.trim();
         String previous = nickname(context);
@@ -302,11 +302,15 @@ final class CommentChecker {
         Set<String> scannedNow = new HashSet<>(scanned);
         scannedNow.removeAll(scannedBefore);
 
-        preferences.edit()
-                .putString(KEY_TRACKED, TrackedPosts.encode(tracked))
-                .putStringSet(KEY_SCANNED, capped(scannedNow, scannedBefore, MAX_SCANNED))
-                .putStringSet(KEY_SEEN, capped(seenNow, seen, MAX_SEEN))
-                .commit();
+        // setNickname 과 모니터를 공유한다 - 검사와 commit 사이에 닉네임이 바뀌어 끼어들 수 없다.
+        synchronized (CommentChecker.class) {
+            if (!nickname.equals(nickname(context))) return;
+            preferences.edit()
+                    .putString(KEY_TRACKED, TrackedPosts.encode(tracked))
+                    .putStringSet(KEY_SCANNED, capped(scannedNow, scannedBefore, MAX_SCANNED))
+                    .putStringSet(KEY_SEEN, capped(seenNow, seen, MAX_SEEN))
+                    .commit();
+        }
 
         if (sendNotifications && !fresh.isEmpty()) notifyComments(context, fresh);
     }
