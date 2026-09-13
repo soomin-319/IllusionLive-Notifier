@@ -95,7 +95,7 @@ final class TutorialArt extends View {
                 notification(canvas, left - phoneW * 0.3f, h * 0.09f, right + phoneW * 0.3f,
                         h * 0.37f, h);
                 break;
-            default: // posts from before the first launch stay silent
+            case 4: // posts from before the first launch stay silent
                 for (int i = 0; i < 4; i++) {
                     float t = top + i * pitch;
                     postRow(canvas, rowLeft, t, rowRight, t + rowH, i >= 2);
@@ -109,6 +109,19 @@ final class TutorialArt extends View {
                 stroke.setPathEffect(dash);
                 canvas.drawLine(rowLeft, line, rowRight, line, stroke);
                 stroke.setPathEffect(null);
+                break;
+            default: // type the nickname used on the site: a label above the input box, cursor in it
+                float labelW = (rowRight - rowLeft) * 0.34f;
+                roundRect(canvas, rowLeft, top, rowLeft + labelW, top + rowH * 0.24f, rowH * 0.06f,
+                        alpha(MainActivity.INK, 0x99), 0);
+                float fieldTop = top + rowH * 0.48f;
+                float fieldBottom = fieldTop + rowH * 0.9f;
+                roundRect(canvas, rowLeft, fieldTop, rowRight, fieldBottom, rowH * 0.2f,
+                        MainActivity.SURFACE, MainActivity.LINE);
+                stroke.setColor(MainActivity.ACCENT);
+                float cursorX = rowLeft + (rowRight - rowLeft) * 0.12f;
+                canvas.drawLine(cursorX, fieldTop + rowH * 0.2f, cursorX, fieldBottom - rowH * 0.2f,
+                        stroke);
                 break;
         }
     }

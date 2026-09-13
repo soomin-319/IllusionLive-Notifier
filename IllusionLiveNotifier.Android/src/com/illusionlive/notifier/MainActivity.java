@@ -146,7 +146,7 @@ public final class MainActivity extends Activity {
         FeedAlarmReceiver.sync(this);
         if (!requestNotificationPermission()) maybeAskBatteryExemption();
         checkNow();
-        maybeShowTutorial();
+        Tutorial.maybeShow(this);
     }
 
     /** The exemption can be granted or revoked in system settings while the app is away. */
@@ -576,123 +576,6 @@ public final class MainActivity extends Activity {
         parent.addView(row, new LinearLayout.LayoutParams(-1, -2));
     }
 
-    // -------------------------------------------------------------- first run
-
-    /** Title and body of each tutorial page; the picture for it lives in {@link TutorialArt}. */
-    private static final String[][] TUTORIAL = {
-            {"알림 받을 게시판 고르기",
-                    "오른쪽 위 톱니바퀴를 누르면 게시판 목록이 열립니다.\n체크한 게시판의 새 글만 알려 드립니다."},
-            {"당겨서 새로고침",
-                    "목록 맨 위에서 아래로 당기면\n새 글을 바로 확인합니다."},
-            {"글 열어보기",
-                    "글을 누르면 브라우저에서\n원문이 열립니다."},
-            {"앱을 닫아도 알림",
-                    "백그라운드에서 새 글을 확인해 알림을 보냅니다.\nAndroid 절전 상태에서는 조금 늦어질 수 있습니다."},
-            {"지금 있는 글은 알리지 않아요",
-                    "첫 실행 시점의 글은 기준으로만 저장하고,\n이후 올라오는 새 글부터 알려 드립니다."}
-    };
-
-    /**
-     * A paged card over everything on the very first launch: one drawn example per step. Added to
-     * the window rather than to {@link #content}, so the tabs cannot swap it away before it is
-     * dismissed.
-     */
-    private void maybeShowTutorial() {
-        final SharedPreferences preferences = FeedChecker.prefs(this);
-        if (preferences.getBoolean(FeedChecker.KEY_TUTORIAL_SEEN, false)) return;
-
-        final FrameLayout scrim = new FrameLayout(this);
-        scrim.setBackgroundColor(0xB3000000);
-        scrim.setClickable(true); // swallow taps meant for the list underneath
-
-        LinearLayout card = card();
-
-        final TutorialArt art = new TutorialArt(this);
-        LinearLayout.LayoutParams artParams = new LinearLayout.LayoutParams(-1, dp(178));
-        artParams.setMargins(0, dp(4), 0, dp(16));
-        card.addView(art, artParams);
-
-        final TextView title = sectionTitle("");
-        card.addView(title, matchWrap(dp(8)));
-
-        final TextView body = text("", 14.5f);
-        body.setTextColor(MUTED);
-        body.setLineSpacing(dp(4), 1f);
-        body.setMinLines(2); // keeps the card from resizing between pages
-        card.addView(body, matchWrap(dp(16)));
-
-        final LinearLayout dots = new LinearLayout(this);
-        dots.setOrientation(LinearLayout.HORIZONTAL);
-        dots.setGravity(Gravity.CENTER);
-        for (int i = 0; i < TUTORIAL.length; i++) {
-            LinearLayout.LayoutParams dotParams = new LinearLayout.LayoutParams(dp(7), dp(7));
-            dotParams.setMargins(dp(4), 0, dp(4), 0);
-            dots.addView(new View(this), dotParams);
-        }
-        card.addView(dots, matchWrap(dp(16)));
-
-        final TextView skip = text("건너뛰기", 15f);
-        skip.setTextColor(MUTED);
-        skip.setGravity(Gravity.CENTER);
-        skip.setPadding(dp(16), dp(13), dp(16), dp(13));
-        skip.setBackground(ripple(SURFACE, 0, MUTED));
-
-        final TextView next = text("", 15.5f);
-        next.setTypeface(Typeface.DEFAULT_BOLD);
-        next.setTextColor(ON_BRAND);
-        next.setGravity(Gravity.CENTER);
-        next.setPadding(0, dp(13), 0, dp(13));
-        next.setBackground(ripple(BRAND, 0, ON_BRAND));
-
-        LinearLayout buttons = new LinearLayout(this);
-        buttons.setOrientation(LinearLayout.HORIZONTAL);
-        buttons.addView(skip, new LinearLayout.LayoutParams(-2, -2));
-        LinearLayout.LayoutParams nextParams = new LinearLayout.LayoutParams(0, -2, 1);
-        nextParams.setMargins(dp(10), 0, 0, 0);
-        buttons.addView(next, nextParams);
-        card.addView(buttons, new LinearLayout.LayoutParams(-1, -2));
-
-        final int[] step = {0};
-        final Runnable render = new Runnable() {
-            @Override public void run() {
-                art.setStep(step[0]);
-                title.setText(TUTORIAL[step[0]][0]);
-                body.setText(TUTORIAL[step[0]][1]);
-                for (int i = 0; i < dots.getChildCount(); i++)
-                    dots.getChildAt(i).setBackground(rounded(i == step[0] ? BRAND : LINE, 4, 0));
-                boolean last = step[0] == TUTORIAL.length - 1;
-                next.setText(last ? "시작하기" : "다음");
-                skip.setVisibility(last ? View.GONE : View.VISIBLE);
-            }
-        };
-
-        final Runnable dismiss = new Runnable() {
-            @Override public void run() {
-                preferences.edit().putBoolean(FeedChecker.KEY_TUTORIAL_SEEN, true).commit();
-                ((ViewGroup) scrim.getParent()).removeView(scrim);
-            }
-        };
-        skip.setOnClickListener(view -> dismiss.run());
-        next.setOnClickListener(view -> {
-            if (step[0] == TUTORIAL.length - 1) {
-                dismiss.run();
-                return;
-            }
-            step[0]++;
-            render.run();
-        });
-        art.setOnClickListener(view -> next.performClick()); // tapping the picture moves on too
-        render.run();
-
-        // The card scrolls on short screens rather than pushing its buttons off the bottom.
-        ScrollView cardScroll = new ScrollView(this);
-        cardScroll.addView(card, new ScrollView.LayoutParams(-1, -2));
-        FrameLayout.LayoutParams cardParams = new FrameLayout.LayoutParams(-1, -2, Gravity.CENTER);
-        cardParams.setMargins(dp(22), dp(22), dp(22), dp(22));
-        scrim.addView(cardScroll, cardParams);
-        getWindow().addContentView(scrim, new FrameLayout.LayoutParams(-1, -1));
-    }
-
     // --------------------------------------------------------------- actions
 
     private void checkNow() {
@@ -858,7 +741,7 @@ public final class MainActivity extends Activity {
 
     // --------------------------------------------------------------- drawing
 
-    private GradientDrawable rounded(int fill, int radiusDp, int stroke) {
+    GradientDrawable rounded(int fill, int radiusDp, int stroke) {
         GradientDrawable shape = new GradientDrawable();
         shape.setColor(fill);
         shape.setCornerRadius(dp(radiusDp));
@@ -866,7 +749,7 @@ public final class MainActivity extends Activity {
         return shape;
     }
 
-    private Drawable ripple(int fill, int radiusDp, int rippleColor) {
+    Drawable ripple(int fill, int radiusDp, int rippleColor) {
         int translucent = (rippleColor & 0x00FFFFFF) | 0x40000000;
         return new RippleDrawable(ColorStateList.valueOf(translucent),
                 rounded(fill, radiusDp, 0), rounded(Color.WHITE, radiusDp, 0));
@@ -881,7 +764,7 @@ public final class MainActivity extends Activity {
         return shape;
     }
 
-    private LinearLayout card() {
+    LinearLayout card() {
         LinearLayout view = new LinearLayout(this);
         view.setOrientation(LinearLayout.VERTICAL);
         view.setPadding(dp(14), dp(12), dp(14), dp(14));
@@ -890,14 +773,14 @@ public final class MainActivity extends Activity {
     }
 
     /** A card the group band can reach the edges of: the rows bring their own padding. */
-    private LinearLayout bandCard() {
+    LinearLayout bandCard() {
         LinearLayout view = new LinearLayout(this);
         view.setOrientation(LinearLayout.VERTICAL);
         view.setBackground(rounded(SURFACE, 0, LINE));
         return view;
     }
 
-    private TextView sectionTitle(String value) {
+    TextView sectionTitle(String value) {
         TextView view = text(value, 18);
         view.setTextColor(INK);
         view.setTypeface(Typeface.DEFAULT_BOLD);
@@ -912,7 +795,7 @@ public final class MainActivity extends Activity {
      * whether the *text* on it should be white or near-black — which every member answers at
      * better than 5.7:1. Two-colour members still use the first.
      */
-    private TextView groupLabel(String value) {
+    TextView groupLabel(String value) {
         int[] colors = MemberColors.of(value);
         int fill = colors == null ? HEADER : colors[0];
         TextView view = text(value, 12.5f);
@@ -929,7 +812,7 @@ public final class MainActivity extends Activity {
      * The site's own controls are switches, and a switch says its state from across the room in a
      * way a checkbox does not. The track takes the brand at the framework's own track alpha.
      */
-    private Switch switchRow(String label, float sp, boolean checked,
+    Switch switchRow(String label, float sp, boolean checked,
                              CompoundButton.OnCheckedChangeListener listener) {
         Switch view = new Switch(this);
         view.setText(label);
@@ -945,7 +828,7 @@ public final class MainActivity extends Activity {
         return view;
     }
 
-    private TextView text(String value, float sp) {
+    TextView text(String value, float sp) {
         TextView view = new TextView(this);
         view.setText(value);
         view.setTextSize(sp);
@@ -954,13 +837,13 @@ public final class MainActivity extends Activity {
         return view;
     }
 
-    private LinearLayout.LayoutParams matchWrap(int bottomMargin) {
+    LinearLayout.LayoutParams matchWrap(int bottomMargin) {
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
         params.setMargins(0, 0, 0, bottomMargin);
         return params;
     }
 
-    private int dp(int value) {
+    int dp(int value) {
         return Math.round(value * getResources().getDisplayMetrics().density);
     }
 

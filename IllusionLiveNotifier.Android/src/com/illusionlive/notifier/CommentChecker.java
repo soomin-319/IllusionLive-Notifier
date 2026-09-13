@@ -60,6 +60,14 @@ final class CommentChecker {
         return FeedChecker.prefs(context).getString(KEY_NICKNAME, "").trim();
     }
 
+    /** 캐시된 글 작성자 중에 이 닉네임이 있는지. 네트워크를 쓰지 않는다. 오타 확인용이라 저장을 막지 않는다. */
+    static boolean knownAuthor(Context context, String nickname) {
+        for (FeedParser.Post post : FeedChecker.cachedPosts(context)) {
+            if (nickname.equals(post.author)) return true;
+        }
+        return false;
+    }
+
     static boolean myPostsEnabled(Context context) {
         return FeedChecker.prefs(context).getBoolean(KEY_MY_POSTS, false);
     }
