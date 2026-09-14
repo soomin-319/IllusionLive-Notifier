@@ -343,6 +343,15 @@ public final class SelfTest {
                 : "게시가 가장 이른 글부터 잘린다";
         assert TrackedPosts.contains(candidates, "https://www.illusionlive.com/eb?idx=5");
 
+        // 늦게 들어와도 게시가 더 최근이면 남는다. addCandidate 가 added 를 now 로 덮으면 여기서 틀린다.
+        List<TrackedPosts.Tracked> late = TrackedPosts.addCandidate(candidates,
+                new TrackedPosts.Tracked("https://www.illusionlive.com/eb?idx=99",
+                        "p2026090300000000000a1", "b2026090300000000000b1",
+                        now - day + 30, now, 0), now);
+        assert late.get(0).url.endsWith("idx=99") : "늦게 들어온 최신 글이 앞";
+        assert !TrackedPosts.contains(late, "https://www.illusionlive.com/eb?idx=5")
+                : "상한에서는 게시가 가장 이른 글이 빠진다";
+
         // 같은 url 은 한 번만 들어가고 먼저 있던 값이 남는다.
         List<TrackedPosts.Tracked> again = TrackedPosts.addCandidate(candidates,
                 new TrackedPosts.Tracked("https://www.illusionlive.com/eb?idx=24",
@@ -369,6 +378,36 @@ public final class SelfTest {
         assert rest.size() == candidates.size() - 1 : "추적 중인 글 하나만 빠진다";
         assert !TrackedPosts.contains(rest, "https://www.illusionlive.com/eb?idx=24");
         assert TrackedPosts.contains(rest, "https://www.illusionlive.com/eb?idx=23");
+
+        // ---------------------------------------------------------- 보관 기준
+        // 창 경계: 게시 후 TTL_MS 가 지나면 밖, 날짜를 못 읽은 글(0)은 안.
+        FeedParser.Post undated = new FeedParser.Post("g-undated", "eb", "t", "a", 0,
+                "https://www.illusionlive.com/eb?idx=40");
+        FeedParser.Post recent = new FeedParser.Post("g-recent", "eb", "t", "a", now - day,
+                "https://www.illusionlive.com/eb?idx=41");
+        FeedParser.Post expired = new FeedParser.Post("g-expired", "eb", "t", "a",
+                now - TrackedPosts.TTL_MS, "https://www.illusionlive.com/eb?idx=42");
+        FeedParser.Post inside = new FeedParser.Post("g-inside", "eb", "t", "a",
+                now - TrackedPosts.TTL_MS + 1, "https://www.illusionlive.com/eb?idx=43");
+        assert !TrackedPosts.outsideWindow(undated, now) : "날짜 없는 글은 창 안";
+        assert !TrackedPosts.outsideWindow(inside, now) : "TTL 직전은 창 안";
+        assert TrackedPosts.outsideWindow(expired, now) : "TTL 이 지나면 창 밖";
+
+        // scanned 는 캐시에 남아 있고 창 안인 글만 남긴다. 개수로 자르지 않는다.
+        Set<String> scannedIds = new HashSet<>(Arrays.asList(
+                "g-undated", "g-recent", "g-expired", "g-gone"));
+        Set<String> kept = TrackedPosts.keepScanned(
+                Arrays.asList(undated, recent, expired, inside), scannedIds, now);
+        assert kept.equals(new HashSet<>(Arrays.asList("g-undated", "g-recent")))
+                : "창 안이면서 연 적 있는 글만 남는다: " + kept;
+
+        // seen 은 날짜가 최신인 코드부터 남긴다.
+        Set<String> codes = new HashSet<>(Arrays.asList(
+                "c20260901000000000000a1", "c20260914000000000000a1", "c20260910000000000000a1"));
+        assert CommentRules.newestCodes(codes, 2).equals(new HashSet<>(Arrays.asList(
+                "c20260914000000000000a1", "c20260910000000000000a1")))
+                : "가장 오래된 코드가 빠진다";
+        assert CommentRules.newestCodes(codes, 5).size() == 3 : "상한보다 적으면 전부 남는다";
 
         // ------------------------------------------------------------ 알림 규칙
         List<CommentParser.Comment> thread = new ArrayList<>();

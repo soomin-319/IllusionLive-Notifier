@@ -3,7 +3,9 @@ package com.illusionlive.notifier;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
@@ -127,6 +129,23 @@ final class TrackedPosts {
         }
         Collections.sort(next, NEWEST_FIRST);
         return next.size() <= MAX ? next : new ArrayList<>(next.subList(0, MAX));
+    }
+
+    /** 게시한 지 {@link #TTL_MS} 가 지났는지. 날짜를 읽지 못한 글(0)은 창 안에 있는 것으로 본다. */
+    static boolean outsideWindow(FeedParser.Post post, long now) {
+        return post.published > 0 && now - post.published >= TTL_MS;
+    }
+
+    /**
+     * 연 적 있는 글 가운데 다시 볼 일이 남은 것 — 아직 캐시에 있고 창 안인 글 — 만 남긴다. 개수
+     * 상한으로 자르면 해시 순서로 창 안의 글이 밀려나, 발견 스캔이 그 글을 사이클마다 다시 받는다.
+     */
+    static Set<String> keepScanned(List<FeedParser.Post> posts, Set<String> scanned, long now) {
+        Set<String> keep = new HashSet<>();
+        for (FeedParser.Post post : posts) {
+            if (scanned.contains(post.id) && !outsideWindow(post, now)) keep.add(post.id);
+        }
+        return keep;
     }
 
     /** 확인한 지 오래된 것부터 최대 {@code limit} 개. */

@@ -1,6 +1,8 @@
 package com.illusionlive.notifier;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -47,5 +49,16 @@ final class CommentRules {
             if (onMyPost || (afterMyComment && follows)) picked.put(comment.code, comment);
         }
         return new ArrayList<>(picked.values());
+    }
+
+    /**
+     * 날짜가 가장 최근인 댓글 코드 {@code max} 개. 코드는 {@code c} 뒤 여덟 자리가 작성 날짜라
+     * 문자열 역순이 곧 최신순이다. 해시 순서로 자르면 추적 중인 글의 코드가 밀려나 같은 댓글을
+     * 다시 알린다.
+     */
+    static Set<String> newestCodes(Set<String> codes, int max) {
+        List<String> sorted = new ArrayList<>(codes);
+        Collections.sort(sorted, Collections.<String>reverseOrder());
+        return new HashSet<>(sorted.subList(0, Math.min(max, sorted.size())));
     }
 }

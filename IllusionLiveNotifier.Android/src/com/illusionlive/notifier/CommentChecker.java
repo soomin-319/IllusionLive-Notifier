@@ -42,7 +42,6 @@ final class CommentChecker {
     static final String KEY_CANDIDATES = "comment_candidates";
 
     private static final int MAX_SEEN = 500;
-    private static final int MAX_SCANNED = 200;
 
     private static final String COMMENT_URL = "https://www.illusionlive.com/ajax/post_comment_paging.cm";
     /** 한 사이클에 새로 들여다볼 글 수. 글 페이지가 61 KB 라 발견 비용의 대부분이 여기서 난다. */
@@ -123,20 +122,6 @@ final class CommentChecker {
 
     private static Set<String> stringSet(SharedPreferences preferences, String key) {
         return new HashSet<>(preferences.getStringSet(key, Collections.<String>emptySet()));
-    }
-
-    /**
-     * 이번 사이클에 본 값을 먼저 채우고 남는 자리만 옛 값으로 메운다. {@link FeedChecker} 의
-     * seen_ids 와 같은 방식이다. 순서를 뒤집으면 방금 본 댓글이 상한에 밀려 빠지고, 다음
-     * 사이클에 같은 댓글을 새 것으로 보아 다시 알린다.
-     */
-    private static Set<String> capped(Set<String> fresh, Set<String> old, int max) {
-        Set<String> next = new HashSet<>(fresh);
-        for (String value : old) {
-            if (next.size() >= max) break;
-            next.add(value);
-        }
-        return next;
     }
 
     private static String get(String url, int limit) throws IOException {
@@ -277,15 +262,13 @@ final class CommentChecker {
         boolean myReplies = myRepliesEnabled(context);
         long now = System.currentTimeMillis();
 
-        List<TrackedPosts.Tracked> tracked =
-                TrackedPosts.decode(preferences.getString(KEY_TRACKED, ""));
+        List<TrackedPosts.Tracked> tracked = TrackedPosts.prune(
+                TrackedPosts.decode(preferences.getString(KEY_TRACKED, "")), now);
         Set<String> scanned = stringSet(preferences, KEY_SCANNED);
         Set<String> seen = stringSet(preferences, KEY_SEEN);
         List<TrackedPosts.Tracked> candidates =
                 TrackedPosts.decode(preferences.getString(KEY_CANDIDATES, ""));
         List<TrackedPosts.Tracked> probed = new ArrayList<>();
-        // 상한을 적용할 때 이번 사이클 것을 먼저 채우려면 무엇이 새로 들어왔는지 알아야 한다.
-        Set<String> scannedBefore = new HashSet<>(scanned);
         Set<String> seenNow = new HashSet<>();
 
         if (myPosts) tracked = registerMyPosts(posts, tracked, scanned, nickname, now, deadline);
@@ -353,8 +336,8 @@ final class CommentChecker {
             }
         }
 
-        Set<String> scannedNow = new HashSet<>(scanned);
-        scannedNow.removeAll(scannedBefore);
+        // 이번 사이클에 본 코드와 전에 본 코드를 합친 뒤, 저장할 때 최신 것만 남긴다.
+        seenNow.addAll(seen);
 
         // setNickname 과 모니터를 공유한다 - 검사와 commit 사이에 닉네임이 바뀌어 끼어들 수 없다.
         synchronized (CommentChecker.class) {
@@ -363,8 +346,8 @@ final class CommentChecker {
                     .putString(KEY_TRACKED, TrackedPosts.encode(tracked))
                     .putString(KEY_CANDIDATES, TrackedPosts.encode(
                             TrackedPosts.prune(TrackedPosts.without(candidates, tracked), now)))
-                    .putStringSet(KEY_SCANNED, capped(scannedNow, scannedBefore, MAX_SCANNED))
-                    .putStringSet(KEY_SEEN, capped(seenNow, seen, MAX_SEEN))
+                    .putStringSet(KEY_SCANNED, TrackedPosts.keepScanned(posts, scanned, now))
+                    .putStringSet(KEY_SEEN, CommentRules.newestCodes(seenNow, MAX_SEEN))
                     .commit();
         }
 
@@ -385,7 +368,7 @@ final class CommentChecker {
             if (budget <= 0) break;
             if (!nickname.equals(post.author)) continue;
             if (scanned.contains(post.id) || TrackedPosts.contains(tracked, post.url)) continue;
-            if (outsideWindow(post, now)) continue;
+            if (TrackedPosts.outsideWindow(post, now)) continue;
             // 예산 소진 - 아직 scanned 에 넣지 않았으니 다음 사이클에 그대로 다시 시도된다.
             if (SystemClock.elapsedRealtime() >= deadline) break;
             budget--;
@@ -407,7 +390,7 @@ final class CommentChecker {
     }
 
     /**
-     * 아직 안 본 글을 사이클당 {@link #SCAN_PER_CYCLE} 개까지 열어, 내 댓글이 있으면 추적에
+     * 아직 안 본 남의 글을 사이클당 {@link #SCAN_PER_CYCLE} 개까지 열어, 내 댓글이 있으면 추적에
      * 넣는다. 있든 없든 {@link #KEY_SCANNED} 에 적어 두 번 열지 않는다. 댓글 목록까지 받은 글은
      * {@code probed} 에 담아 재스캔 후보로 넘긴다.
      */
@@ -418,8 +401,10 @@ final class CommentChecker {
         int budget = SCAN_PER_CYCLE;
         for (FeedParser.Post post : posts) {
             if (budget <= 0) break;
+            // 내 글은 registerMyPosts 몫이다. 여기서 scanned 에 넣으면 그쪽이 이 글을 영영 건너뛴다.
+            if (nickname.equals(post.author)) continue;
             if (scanned.contains(post.id) || TrackedPosts.contains(tracked, post.url)) continue;
-            if (outsideWindow(post, now)) continue;
+            if (TrackedPosts.outsideWindow(post, now)) continue;
             // 예산 소진 - 아직 scanned 에 넣지 않았으니 다음 사이클에 그대로 다시 시도된다.
             if (SystemClock.elapsedRealtime() >= deadline) break;
             budget--;
@@ -469,13 +454,8 @@ final class CommentChecker {
         return false;
     }
 
-    /** 날짜를 읽지 못한 글(0)은 창 안에 있는 것으로 본다. */
-    private static boolean outsideWindow(FeedParser.Post post, long now) {
-        return post.published > 0 && now - post.published >= TrackedPosts.TTL_MS;
-    }
-
     /**
-     * 새 댓글을 알림으로 보낸다. 한 건이면 글을 열 링크를, 여러 건이면 메인을 링크한다.
+     * 새 댓글을 알림으로 보낸다. 한 건이거나 모두 한 글에 달렸으면 그 글을, 여러 글에 걸치면 메인을 링크한다.
      * 권한이 없거나 Android 13+ 에서 알림 권한이 거절되면 이 함수를 호출하지 않는다.
      */
     private static void notifyComments(Context context, List<Hit> hits) {
@@ -499,7 +479,17 @@ final class CommentChecker {
                     : hit.comment.body + " · " + hit.postTitle;
             notificationId = hit.comment.code.hashCode();
         } else {
-            intent = new Intent(context, MainActivity.class);
+            // 모두 한 글에 달린 댓글이면 그 글을 연다. 여러 글에 걸치면 목록을 연다.
+            String onlyUrl = hits.get(0).postUrl;
+            for (Hit hit : hits) {
+                if (!hit.postUrl.equals(onlyUrl)) {
+                    onlyUrl = null;
+                    break;
+                }
+            }
+            intent = onlyUrl != null
+                    ? new Intent(Intent.ACTION_VIEW, Uri.parse(onlyUrl))
+                    : new Intent(context, MainActivity.class);
             title = "새 댓글 " + hits.size() + "개";
             text = hits.get(0).comment.author + " 외 " + (hits.size() - 1) + "명";
             notificationId = SUMMARY_ID;
