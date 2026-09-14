@@ -495,7 +495,7 @@ public final class MainActivity extends Activity {
         pane.addView(themeCard, matchWrap(dp(11)));
 
         LinearLayout backgroundCard = card();
-        backgroundCard.addView(switchRow("백그라운드 새 글 알림", 15,
+        backgroundCard.addView(switchRow("백그라운드 알림", 15,
                 preferences.getBoolean(FeedChecker.KEY_BACKGROUND, true),
                 new CompoundButton.OnCheckedChangeListener() {
                     @Override public void onCheckedChanged(CompoundButton view, boolean checked) {
@@ -505,7 +505,7 @@ public final class MainActivity extends Activity {
                     }
                 }), new LinearLayout.LayoutParams(-1, -2));
 
-        TextView guide = text("앱이 닫혀 있어도 새 글을 자동으로 확인합니다.", 13);
+        TextView guide = text("앱이 닫혀 있어도 새 글과 댓글을 자동으로 확인합니다.", 13);
         guide.setTextColor(MUTED);
         LinearLayout.LayoutParams guideParams = new LinearLayout.LayoutParams(-1, -2);
         guideParams.setMargins(0, dp(6), 0, 0);

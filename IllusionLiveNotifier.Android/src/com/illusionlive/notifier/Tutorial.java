@@ -126,7 +126,9 @@ final class Tutorial {
             @Override public void run() {
                 // 닉네임 저장은 여기서 하지 않는다 — 건너뛰기는 무엇을 적었든 저장 없이 닫기만 한다.
                 preferences.edit().putBoolean(FeedChecker.KEY_TUTORIAL_SEEN, true).commit();
-                ((ViewGroup) scrim.getParent()).removeView(scrim);
+                // 확인 창이 두 개 떴다가 둘 다 저장하면 두 번 불린다 - 이미 닫혔으면 그냥 둔다.
+                ViewGroup parent = (ViewGroup) scrim.getParent();
+                if (parent != null) parent.removeView(scrim);
             }
         };
         skip.setOnClickListener(view -> dismiss.run());
@@ -152,7 +154,10 @@ final class Tutorial {
                     })
                     .show();
         });
-        art.setOnClickListener(view -> next.performClick()); // 그림을 눌러도 넘어간다
+        // 그림을 눌러도 넘어간다. 닉네임 쪽에서는 키보드를 닫으려고 누른 것이 저장이 되지 않게 막는다.
+        art.setOnClickListener(view -> {
+            if (step[0] < PAGES.length - 1) next.performClick();
+        });
         render.run();
 
         // 화면이 짧으면 버튼이 밀려나는 대신 카드가 스크롤된다.

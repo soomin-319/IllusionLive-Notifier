@@ -50,8 +50,9 @@ final class FeedChecker {
     private static final int MAX_CACHED_POSTS = 200;
     private static final String CHANNEL_ID = "new_posts";
     private static final int MAX_FEED_BYTES = 2 * 1024 * 1024;
-    // setAndAllowWhileIdle 알람은 Doze 상태에서 네트워크 허용 시간을 대략 10초만 받는다. 댓글
-    // 확인 단계를 그 안에서 끝내야 goAsync() 로 늘린 브로드캐스트 처리 제한 안에도 넉넉히 든다.
+    // 댓글 단계는 RSS 를 포함해 사이클 시작 후 10초까지만 새 요청을 시작한다. setAndAllowWhileIdle
+    // 알람이 Doze 에서 받는 네트워크 허용 시간이 대략 10초다. goAsync() 는 브로드캐스트 처리
+    // 제한(백그라운드 약 60초)을 늘리지 않지만, 최악인 RSS 35초나 댓글 단계 약 23초도 그 안에 든다.
     private static final long COMMENT_BUDGET_MS = 10_000L;
     private static final ExecutorService EXECUTOR = Executors.newSingleThreadExecutor();
     private static final AtomicBoolean RUNNING = new AtomicBoolean();
@@ -112,7 +113,7 @@ final class FeedChecker {
 
     /**
      * {@code waitForComments} 가 false 면(당겨서 새로고침) 목록 결과를 먼저 넘기고 댓글 확인은
-     * 같은 스레드에서 뒤이어 돈다 — 화면이 최대 17건에 이르는 댓글 네트워크 요청을 기다리지
+     * 같은 스레드에서 뒤이어 돈다 — 화면이 최대 19건에 이르는 댓글 네트워크 요청을 기다리지
      * 않는다. true 면(알람) 댓글 확인까지 끝난 뒤에 넘긴다 — goAsync() 로 받은 브로드캐스트가
      * 끝나 done.finish() 가 불리고 나면 프로세스가 그 사이 죽을 수 있어, 그 전에 끝내야 한다.
      */
