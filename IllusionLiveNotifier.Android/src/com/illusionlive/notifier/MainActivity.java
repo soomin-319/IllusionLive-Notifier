@@ -2,8 +2,10 @@ package com.illusionlive.notifier;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.content.ActivityNotFoundException;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
@@ -29,6 +31,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.PowerManager;
 import android.provider.Settings;
+import android.text.InputType;
 import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.MotionEvent;
@@ -40,6 +43,7 @@ import android.window.OnBackInvokedCallback;
 import android.window.OnBackInvokedDispatcher;
 import android.widget.BaseAdapter;
 import android.widget.CompoundButton;
+import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.ImageButton;
 import android.widget.ImageView;
@@ -146,7 +150,7 @@ public final class MainActivity extends Activity {
         FeedAlarmReceiver.sync(this);
         if (!requestNotificationPermission()) maybeAskBatteryExemption();
         checkNow();
-        maybeShowTutorial();
+        Tutorial.maybeShow(this);
     }
 
     /** The exemption can be granted or revoked in system settings while the app is away. */
@@ -491,7 +495,7 @@ public final class MainActivity extends Activity {
         pane.addView(themeCard, matchWrap(dp(11)));
 
         LinearLayout backgroundCard = card();
-        backgroundCard.addView(switchRow("백그라운드 새 글 알림", 15,
+        backgroundCard.addView(switchRow("백그라운드 알림", 15,
                 preferences.getBoolean(FeedChecker.KEY_BACKGROUND, true),
                 new CompoundButton.OnCheckedChangeListener() {
                     @Override public void onCheckedChanged(CompoundButton view, boolean checked) {
@@ -501,7 +505,7 @@ public final class MainActivity extends Activity {
                     }
                 }), new LinearLayout.LayoutParams(-1, -2));
 
-        TextView guide = text("앱이 닫혀 있어도 새 글을 자동으로 확인합니다.", 13);
+        TextView guide = text("앱이 닫혀 있어도 새 글과 댓글을 자동으로 확인합니다.", 13);
         guide.setTextColor(MUTED);
         LinearLayout.LayoutParams guideParams = new LinearLayout.LayoutParams(-1, -2);
         guideParams.setMargins(0, dp(6), 0, 0);
@@ -517,6 +521,7 @@ public final class MainActivity extends Activity {
         backgroundCard.addView(batteryRow, batteryParams);
         bindBatteryRow();
         pane.addView(backgroundCard, matchWrap(dp(11)));
+        pane.addView(commentCard(preferences), matchWrap(dp(11)));
 
         pane.addView(sectionTitle("게시판별 알림"), matchWrap(dp(4)));
         TextView hint = text("체크한 게시판의 새 글만 알립니다. 변경은 바로 저장됩니다.", 12.5f);
@@ -576,121 +581,107 @@ public final class MainActivity extends Activity {
         parent.addView(row, new LinearLayout.LayoutParams(-1, -2));
     }
 
-    // -------------------------------------------------------------- first run
+    /** 닉네임 한 줄과 스위치 두 개. 닉네임이 비어 있으면 스위치는 꺼진 채 흐리게 보인다. */
+    private LinearLayout commentCard(final SharedPreferences preferences) {
+        LinearLayout card = bandCard();
+        final String nickname = CommentChecker.nickname(this);
 
-    /** Title and body of each tutorial page; the picture for it lives in {@link TutorialArt}. */
-    private static final String[][] TUTORIAL = {
-            {"알림 받을 게시판 고르기",
-                    "오른쪽 위 톱니바퀴를 누르면 게시판 목록이 열립니다.\n체크한 게시판의 새 글만 알려 드립니다."},
-            {"당겨서 새로고침",
-                    "목록 맨 위에서 아래로 당기면\n새 글을 바로 확인합니다."},
-            {"글 열어보기",
-                    "글을 누르면 브라우저에서\n원문이 열립니다."},
-            {"앱을 닫아도 알림",
-                    "백그라운드에서 새 글을 확인해 알림을 보냅니다.\nAndroid 절전 상태에서는 조금 늦어질 수 있습니다."},
-            {"지금 있는 글은 알리지 않아요",
-                    "첫 실행 시점의 글은 기준으로만 저장하고,\n이후 올라오는 새 글부터 알려 드립니다."}
-    };
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setPadding(dp(14), dp(12), dp(14), dp(12));
+        row.setBackground(ripple(SURFACE, 0, MUTED));
+        TextView label = text("닉네임", 15);
+        TextView value = text(nickname.isEmpty() ? "설정 안 함" : nickname, 15);
+        value.setTextColor(nickname.isEmpty() ? FAINT : MUTED);
+        value.setGravity(Gravity.END);
+        row.addView(label, new LinearLayout.LayoutParams(-2, -2));
+        row.addView(value, new LinearLayout.LayoutParams(0, -2, 1));
+        row.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View view) { askNickname(CommentChecker.nickname(MainActivity.this)); }
+        });
+        card.addView(row, new LinearLayout.LayoutParams(-1, -2));
+
+        TextView hint = text("사이트에서 쓰는 닉네임과 정확히 같아야 합니다.", 12.5f);
+        hint.setTextColor(MUTED);
+        hint.setPadding(dp(14), 0, dp(14), dp(10));
+        card.addView(hint, new LinearLayout.LayoutParams(-1, -2));
+
+        card.addView(commentSwitch(preferences, "내 글에 달린 댓글",
+                CommentChecker.KEY_MY_POSTS, !nickname.isEmpty()),
+                new LinearLayout.LayoutParams(-1, -2));
+        card.addView(commentSwitch(preferences, "내 댓글에 달린 답",
+                CommentChecker.KEY_MY_REPLIES, !nickname.isEmpty()),
+                new LinearLayout.LayoutParams(-1, -2));
+        return card;
+    }
+
+    private Switch commentSwitch(final SharedPreferences preferences, String label,
+                                 final String key, boolean usable) {
+        Switch row = switchRow(label, 14, usable && preferences.getBoolean(key, false),
+                new CompoundButton.OnCheckedChangeListener() {
+                    @Override public void onCheckedChanged(CompoundButton view, boolean checked) {
+                        preferences.edit().putBoolean(key, checked).commit();
+                        if (checked) {
+                            CommentChecker.ensureNotificationChannel(MainActivity.this);
+                            requestNotificationPermission();
+                        }
+                    }
+                });
+        row.setPadding(dp(14), dp(10), dp(14), dp(10));
+        row.setEnabled(usable);
+        row.setAlpha(usable ? 1f : 0.4f);
+        return row;
+    }
 
     /**
-     * A paged card over everything on the very first launch: one drawn example per step. Added to
-     * the window rather than to {@link #content}, so the tabs cannot swap it away before it is
-     * dismissed.
+     * 닉네임을 받는다. 최근 글 작성자 중에 없으면 한 번 되묻는다 —
+     * 오타를 그대로 저장하면 알림이 영영 오지 않고 원인도 드러나지 않는다. 되묻기만 하고 막지는
+     * 않는다. 글을 한 번도 쓰지 않은 사람은 목록에 없는 게 정상이기 때문이다.
      */
-    private void maybeShowTutorial() {
-        final SharedPreferences preferences = FeedChecker.prefs(this);
-        if (preferences.getBoolean(FeedChecker.KEY_TUTORIAL_SEEN, false)) return;
+    private void askNickname(final String initial) {
+        final EditText input = new EditText(this);
+        input.setSingleLine(true);
+        input.setInputType(InputType.TYPE_CLASS_TEXT);
+        input.setText(initial);
+        input.setSelection(input.getText().length());
+        int pad = dp(20);
+        input.setPadding(pad, dp(12), pad, dp(12));
 
-        final FrameLayout scrim = new FrameLayout(this);
-        scrim.setBackgroundColor(0xB3000000);
-        scrim.setClickable(true); // swallow taps meant for the list underneath
+        new AlertDialog.Builder(this)
+                .setTitle("닉네임")
+                .setView(input)
+                .setNegativeButton("취소", null)
+                .setPositiveButton("저장", new DialogInterface.OnClickListener() {
+                    @Override public void onClick(DialogInterface dialog, int which) {
+                        final String value = input.getText().toString().trim();
+                        if (value.isEmpty() || CommentChecker.knownAuthor(MainActivity.this, value)) {
+                            saveNickname(value);
+                            return;
+                        }
+                        new AlertDialog.Builder(MainActivity.this)
+                                .setMessage("최근 글에서 '" + value + "' 을(를) 찾지 못했습니다.\n그대로 저장할까요?")
+                                .setNegativeButton("다시 입력", new DialogInterface.OnClickListener() {
+                                    @Override public void onClick(DialogInterface d, int w) { askNickname(value); }
+                                })
+                                .setPositiveButton("저장", new DialogInterface.OnClickListener() {
+                                    @Override public void onClick(DialogInterface d, int w) {
+                                        saveNickname(value);
+                                    }
+                                })
+                                .show();
+                    }
+                })
+                .show();
+    }
 
-        LinearLayout card = card();
-
-        final TutorialArt art = new TutorialArt(this);
-        LinearLayout.LayoutParams artParams = new LinearLayout.LayoutParams(-1, dp(178));
-        artParams.setMargins(0, dp(4), 0, dp(16));
-        card.addView(art, artParams);
-
-        final TextView title = sectionTitle("");
-        card.addView(title, matchWrap(dp(8)));
-
-        final TextView body = text("", 14.5f);
-        body.setTextColor(MUTED);
-        body.setLineSpacing(dp(4), 1f);
-        body.setMinLines(2); // keeps the card from resizing between pages
-        card.addView(body, matchWrap(dp(16)));
-
-        final LinearLayout dots = new LinearLayout(this);
-        dots.setOrientation(LinearLayout.HORIZONTAL);
-        dots.setGravity(Gravity.CENTER);
-        for (int i = 0; i < TUTORIAL.length; i++) {
-            LinearLayout.LayoutParams dotParams = new LinearLayout.LayoutParams(dp(7), dp(7));
-            dotParams.setMargins(dp(4), 0, dp(4), 0);
-            dots.addView(new View(this), dotParams);
+    /** 닉네임을 저장하고 설정 화면을 다시 그린다. 저장 후 닉네임이 있으면 두 스위치를 켠 것과 같으므로 알림 채널과 권한을 챙긴다. */
+    private void saveNickname(String value) {
+        CommentChecker.setNickname(this, value);
+        if (!CommentChecker.nickname(this).isEmpty()) {
+            CommentChecker.ensureNotificationChannel(this);
+            requestNotificationPermission();
         }
-        card.addView(dots, matchWrap(dp(16)));
-
-        final TextView skip = text("건너뛰기", 15f);
-        skip.setTextColor(MUTED);
-        skip.setGravity(Gravity.CENTER);
-        skip.setPadding(dp(16), dp(13), dp(16), dp(13));
-        skip.setBackground(ripple(SURFACE, 0, MUTED));
-
-        final TextView next = text("", 15.5f);
-        next.setTypeface(Typeface.DEFAULT_BOLD);
-        next.setTextColor(ON_BRAND);
-        next.setGravity(Gravity.CENTER);
-        next.setPadding(0, dp(13), 0, dp(13));
-        next.setBackground(ripple(BRAND, 0, ON_BRAND));
-
-        LinearLayout buttons = new LinearLayout(this);
-        buttons.setOrientation(LinearLayout.HORIZONTAL);
-        buttons.addView(skip, new LinearLayout.LayoutParams(-2, -2));
-        LinearLayout.LayoutParams nextParams = new LinearLayout.LayoutParams(0, -2, 1);
-        nextParams.setMargins(dp(10), 0, 0, 0);
-        buttons.addView(next, nextParams);
-        card.addView(buttons, new LinearLayout.LayoutParams(-1, -2));
-
-        final int[] step = {0};
-        final Runnable render = new Runnable() {
-            @Override public void run() {
-                art.setStep(step[0]);
-                title.setText(TUTORIAL[step[0]][0]);
-                body.setText(TUTORIAL[step[0]][1]);
-                for (int i = 0; i < dots.getChildCount(); i++)
-                    dots.getChildAt(i).setBackground(rounded(i == step[0] ? BRAND : LINE, 4, 0));
-                boolean last = step[0] == TUTORIAL.length - 1;
-                next.setText(last ? "시작하기" : "다음");
-                skip.setVisibility(last ? View.GONE : View.VISIBLE);
-            }
-        };
-
-        final Runnable dismiss = new Runnable() {
-            @Override public void run() {
-                preferences.edit().putBoolean(FeedChecker.KEY_TUTORIAL_SEEN, true).commit();
-                ((ViewGroup) scrim.getParent()).removeView(scrim);
-            }
-        };
-        skip.setOnClickListener(view -> dismiss.run());
-        next.setOnClickListener(view -> {
-            if (step[0] == TUTORIAL.length - 1) {
-                dismiss.run();
-                return;
-            }
-            step[0]++;
-            render.run();
-        });
-        art.setOnClickListener(view -> next.performClick()); // tapping the picture moves on too
-        render.run();
-
-        // The card scrolls on short screens rather than pushing its buttons off the bottom.
-        ScrollView cardScroll = new ScrollView(this);
-        cardScroll.addView(card, new ScrollView.LayoutParams(-1, -2));
-        FrameLayout.LayoutParams cardParams = new FrameLayout.LayoutParams(-1, -2, Gravity.CENTER);
-        cardParams.setMargins(dp(22), dp(22), dp(22), dp(22));
-        scrim.addView(cardScroll, cardParams);
-        getWindow().addContentView(scrim, new FrameLayout.LayoutParams(-1, -1));
+        showSettings();
     }
 
     // --------------------------------------------------------------- actions
@@ -709,7 +700,12 @@ public final class MainActivity extends Activity {
                         refreshing = false;
                         progress.animate().cancel();
                         progress.setVisibility(View.GONE);
-                        if (result.busy) return;
+                        if (result.busy) {
+                            // 댓글 확인 단계가 RUNNING 을 붙잡고 있는 동안 들어온 새로고침이다.
+                            // process() 가 이미 캐시를 커밋해 뒀으니 그것만이라도 다시 보여준다.
+                            adapter.setPosts(FeedChecker.cachedPosts(MainActivity.this));
+                            return;
+                        }
                         if (result.error != null) {
                             // The cached list stays on screen; only say the refresh failed.
                             toast("확인 실패 · " + result.error);
@@ -853,7 +849,7 @@ public final class MainActivity extends Activity {
 
     // --------------------------------------------------------------- drawing
 
-    private GradientDrawable rounded(int fill, int radiusDp, int stroke) {
+    GradientDrawable rounded(int fill, int radiusDp, int stroke) {
         GradientDrawable shape = new GradientDrawable();
         shape.setColor(fill);
         shape.setCornerRadius(dp(radiusDp));
@@ -861,7 +857,7 @@ public final class MainActivity extends Activity {
         return shape;
     }
 
-    private Drawable ripple(int fill, int radiusDp, int rippleColor) {
+    Drawable ripple(int fill, int radiusDp, int rippleColor) {
         int translucent = (rippleColor & 0x00FFFFFF) | 0x40000000;
         return new RippleDrawable(ColorStateList.valueOf(translucent),
                 rounded(fill, radiusDp, 0), rounded(Color.WHITE, radiusDp, 0));
@@ -876,7 +872,7 @@ public final class MainActivity extends Activity {
         return shape;
     }
 
-    private LinearLayout card() {
+    LinearLayout card() {
         LinearLayout view = new LinearLayout(this);
         view.setOrientation(LinearLayout.VERTICAL);
         view.setPadding(dp(14), dp(12), dp(14), dp(14));
@@ -885,14 +881,14 @@ public final class MainActivity extends Activity {
     }
 
     /** A card the group band can reach the edges of: the rows bring their own padding. */
-    private LinearLayout bandCard() {
+    LinearLayout bandCard() {
         LinearLayout view = new LinearLayout(this);
         view.setOrientation(LinearLayout.VERTICAL);
         view.setBackground(rounded(SURFACE, 0, LINE));
         return view;
     }
 
-    private TextView sectionTitle(String value) {
+    TextView sectionTitle(String value) {
         TextView view = text(value, 18);
         view.setTextColor(INK);
         view.setTypeface(Typeface.DEFAULT_BOLD);
@@ -907,7 +903,7 @@ public final class MainActivity extends Activity {
      * whether the *text* on it should be white or near-black — which every member answers at
      * better than 5.7:1. Two-colour members still use the first.
      */
-    private TextView groupLabel(String value) {
+    TextView groupLabel(String value) {
         int[] colors = MemberColors.of(value);
         int fill = colors == null ? HEADER : colors[0];
         TextView view = text(value, 12.5f);
@@ -924,7 +920,7 @@ public final class MainActivity extends Activity {
      * The site's own controls are switches, and a switch says its state from across the room in a
      * way a checkbox does not. The track takes the brand at the framework's own track alpha.
      */
-    private Switch switchRow(String label, float sp, boolean checked,
+    Switch switchRow(String label, float sp, boolean checked,
                              CompoundButton.OnCheckedChangeListener listener) {
         Switch view = new Switch(this);
         view.setText(label);
@@ -940,7 +936,7 @@ public final class MainActivity extends Activity {
         return view;
     }
 
-    private TextView text(String value, float sp) {
+    TextView text(String value, float sp) {
         TextView view = new TextView(this);
         view.setText(value);
         view.setTextSize(sp);
@@ -949,13 +945,13 @@ public final class MainActivity extends Activity {
         return view;
     }
 
-    private LinearLayout.LayoutParams matchWrap(int bottomMargin) {
+    LinearLayout.LayoutParams matchWrap(int bottomMargin) {
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
         params.setMargins(0, 0, 0, bottomMargin);
         return params;
     }
 
-    private int dp(int value) {
+    int dp(int value) {
         return Math.round(value * getResources().getDisplayMetrics().density);
     }
 

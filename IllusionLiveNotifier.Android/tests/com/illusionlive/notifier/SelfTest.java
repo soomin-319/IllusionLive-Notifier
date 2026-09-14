@@ -3,9 +3,12 @@ package com.illusionlive.notifier;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 public final class SelfTest {
     public static void main(String[] args) throws Exception {
@@ -115,6 +118,342 @@ public final class SelfTest {
             assert MemberColors.readableOn(fill, MemberColors.inkOn(fill)) == MemberColors.inkOn(fill)
                     : "Band ink already clears 4.5:1 for " + group;
         }
+        // ------------------------------------------------------------ 댓글 파싱
+        String commentHtml =
+                "<div class=\"comment\" id=\"c202608090b81597ef232d\">" +
+                "<div class=\" main_comment _comment_wrap _comment_wrap_c202608090b81597ef232d\">" +
+                "<div class=\"write\">위즐리어카<span class=\"_comment_at_nick tag date\">2026-08-09 01:32</span></div>" +
+                "<span class=\"_comment_body_m20260818c51a24881609d  _comment_body_c202608090b81597ef232d\"" +
+                " comment_body_code=\"c202608090b81597ef232d\">\n밑에 영상 링크가<br />\r\n잘못된 것 같아염\n</span>" +
+                "</div></div>" +
+                "<div class=\"comment\" id=\"c20260809dbcf697bb6e08\">" +
+                "<div class=\" main_comment _comment_wrap _comment_wrap_c20260809dbcf697bb6e08\">" +
+                "<div class=\"write\">유메루<span class=\"_comment_at_nick tag date\">2026-08-09 01:35</span></div>" +
+                "<span class=\"_comment_body_m2026020341fbaa000ea22  _comment_body_c20260809dbcf697bb6e08\"" +
+                " comment_body_code=\"c20260809dbcf697bb6e08\">이거 맞아염 ヽ(*。&gt;Д&lt;)o゜</span>" +
+                "</div></div>";
+
+        List<CommentParser.Comment> comments = CommentParser.parseComments(commentHtml);
+        assert comments.size() == 2 : "댓글 두 개가 순서대로 나온다";
+        assert "c202608090b81597ef232d".equals(comments.get(0).code);
+        assert "위즐리어카".equals(comments.get(0).author);
+        assert "m20260818c51a24881609d".equals(comments.get(0).member);
+        assert "밑에 영상 링크가 잘못된 것 같아염".equals(comments.get(0).body)
+                : "<br> 는 공백이 되고 앞뒤 공백은 사라진다: [" + comments.get(0).body + "]";
+        assert "유메루".equals(comments.get(1).author);
+        assert "이거 맞아염 ヽ(*。>Д<)o゜".equals(comments.get(1).body)
+                : "HTML 엔티티가 풀린다: [" + comments.get(1).body + "]";
+
+        // 코드 형식이 맞지 않으면 그 댓글만 버린다.
+        String badCode = commentHtml.replace("comment_body_code=\"c202608090b81597ef232d\"",
+                "comment_body_code=\"c../../etc\"");
+        assert CommentParser.parseComments(badCode).size() == 1 : "형식이 틀린 코드는 버린다";
+
+        // 작성자와 본문이 비어도 파싱 자체는 무너지지 않는다.
+        assert CommentParser.parseComments("").isEmpty() : "빈 문자열은 빈 목록";
+        assert CommentParser.parseComments("<div class=\"comment\" id=\"cZZZ\"></div>").isEmpty()
+                : "본문 없는 껍데기는 버린다";
+
+        // 중첩 댓글(답글): _sub_comment_wrap 안에 완전한 comment 블록이 하나 더 있다.
+        String nestedHtml =
+                "<div class=\"comment\" id=\"c2026081011a2b3c4d5e6f\">" +
+                "<div class=\" main_comment _comment_wrap _comment_wrap_c2026081011a2b3c4d5e6f\">" +
+                "<div class=\"write\">원글작성자<span class=\"_comment_at_nick tag date\">2026-08-10 11:00</span></div>" +
+                "<span class=\"_comment_body_m20260818c51a24881609d  _comment_body_c2026081011a2b3c4d5e6f\"" +
+                " comment_body_code=\"c2026081011a2b3c4d5e6f\">원 댓글이에요</span>" +
+                "</div>" +
+                "<div class=\"dropdown_comment _sub_comment_wrap sub_comment_wrap\">" +
+                "<div class=\"comment\" id=\"c2026081011f6e5d4c3b2a\">" +
+                "<div class=\" main_comment _comment_wrap _comment_wrap_c2026081011f6e5d4c3b2a\">" +
+                "<div class=\"write\">답글작성자<span class=\"_comment_at_nick tag date\">2026-08-10 11:05</span></div>" +
+                "<span class=\"_comment_body_m2026020341fbaa000ea22  _comment_body_c2026081011f6e5d4c3b2a\"" +
+                " comment_body_code=\"c2026081011f6e5d4c3b2a\">답글이에요</span>" +
+                "</div></div>" +
+                "</div>" +
+                "</div>";
+
+        List<CommentParser.Comment> nested = CommentParser.parseComments(nestedHtml);
+        assert nested.size() == 2 : "중첩된 답글도 함께 수집된다";
+        assert "c2026081011a2b3c4d5e6f".equals(nested.get(0).code) : "부모 댓글이 먼저 온다";
+        assert "원글작성자".equals(nested.get(0).author) : "부모 댓글의 작성자";
+        assert "m20260818c51a24881609d".equals(nested.get(0).member) : "부모 댓글의 회원 코드";
+        assert "원 댓글이에요".equals(nested.get(0).body) : "부모 댓글의 본문";
+        assert "c2026081011f6e5d4c3b2a".equals(nested.get(1).code) : "중첩된 답글이 그 다음에 온다";
+        assert "답글작성자".equals(nested.get(1).author) : "답글의 작성자";
+        assert "m2026020341fbaa000ea22".equals(nested.get(1).member) : "답글의 회원 코드";
+        assert "답글이에요".equals(nested.get(1).body) : "답글의 본문";
+
+        // 본문이 길어도(2000자를 넘어도) tools 앞에서 제대로 닫히면 댓글은 버려지지 않는다.
+        StringBuilder longBody = new StringBuilder();
+        while (longBody.length() <= 2500) longBody.append('a');
+        String longBodyHtml =
+                "<div class=\"comment\" id=\"c2026081300a0a0a0a0a0a\">" +
+                "<div class=\" main_comment _comment_wrap _comment_wrap_c2026081300a0a0a0a0a0a\">" +
+                "<div class=\"write\">긴글쓴이<span class=\"_comment_at_nick tag date\">2026-08-13 00:00</span></div>" +
+                "<span class=\"_comment_body_m20260818c51a24881609d  _comment_body_c2026081300a0a0a0a0a0a\"" +
+                " comment_body_code=\"c2026081300a0a0a0a0a0a\">" + longBody + "</span>" +
+                "<div class=\"tools clearfix\"><a href=\"#\" class=\"btn_reply\">답글</a><a href=\"#\" class=\"btn_report\">신고</a></div>" +
+                "</div></div>";
+        List<CommentParser.Comment> longComments = CommentParser.parseComments(longBodyHtml);
+        assert longComments.size() == 1 : "2500자 본문이라도 댓글 자체는 버려지지 않는다";
+        assert longComments.get(0).body.length() == 120
+                : "본문은 버려지지 않되 120자로만 잘린다: [" + longComments.get(0).body.length() + "]";
+
+        // 본문 span 이 안 닫히면 tools 뒤 페이저 숫자가 섞여 들어오지 않고 그 댓글을 버린다.
+        String unclosedHtml =
+                "<div class=\"comment\" id=\"c2026081400a0a0a0a0a0a\">" +
+                "<div class=\" main_comment _comment_wrap _comment_wrap_c2026081400a0a0a0a0a0a\">" +
+                "<div class=\"write\">미확인<span class=\"_comment_at_nick tag date\">2026-08-14 00:00</span></div>" +
+                "<span class=\"_comment_body_m20260818c51a24881609d  _comment_body_c2026081400a0a0a0a0a0a\"" +
+                " comment_body_code=\"c2026081400a0a0a0a0a0a\">짧은 댓글" +
+                "<div class=\"tools clearfix\"><a href=\"#\" class=\"btn_reply\">답글</a><a href=\"#\" class=\"btn_report\">신고</a></div>" +
+                "</div></div>" +
+                "<div class=\"paging\"><a href=\"#\" class=\"prev\">이전</a><span class=\"num\">1</span> <span class=\"num on\">2</span></div>";
+        assert CommentParser.parseComments(unclosedHtml).isEmpty()
+                : "본문이 안 닫히면 tools 뒤 페이저 마크업을 삼키지 않고 버린다";
+
+        // --------------------------------------------- 글 페이지에서 두 코드 뽑기
+        String page = "<form id=\"comment_form\">" +
+                "<input type=\"hidden\" name=\"post_code\" value=\"p20260809213e43a4f8ac7\">" +
+                "<input type=\"hidden\" name=\"board_code\" value=\"b20260808bcd2709bb86e5\">" +
+                "<input type=\"hidden\" name=\"comment_token\" value=\"uKkIdNEaSBBahdwJ+2otkk==\">" +
+                "</form>";
+        assert "p20260809213e43a4f8ac7".equals(CommentParser.postCode(page));
+        assert "b20260808bcd2709bb86e5".equals(CommentParser.boardCode(page));
+        assert CommentParser.postCode("<html></html>").isEmpty() : "없으면 빈 문자열";
+        assert CommentParser.postCode(
+                "<input name=\"post_code\" value=\"p20260809../../x\">").isEmpty()
+                : "형식이 틀리면 빈 문자열";
+        assert CommentParser.boardCode(
+                "<input name=\"board_code\" value=\"p20260809213e43a4f8ac7\">").isEmpty()
+                : "접두 문자가 다르면 board_code 가 아니다";
+
+        // 댓글 폼 밖의 decoy 는 무시하고 폼 안의 정상 코드를 써야 한다
+        String pageWithDecoy =
+                "<div class=\"comment_textarea\">" +
+                "<input type=\"hidden\" name=\"post_code\" value=\"p20260101aaaaaaaaaaaaa\">" +
+                "<form id=\"comment_form\">" +
+                "<input type=\"hidden\" name=\"post_code\" value=\"p20260809213e43a4f8ac7\">" +
+                "<input type=\"hidden\" name=\"board_code\" value=\"b20260808bcd2709bb86e5\">" +
+                "</form></div>";
+        assert "p20260809213e43a4f8ac7".equals(CommentParser.postCode(pageWithDecoy))
+                : "폼 안의 코드를 써야 decoy 가 아니다";
+        assert "b20260808bcd2709bb86e5".equals(CommentParser.boardCode(pageWithDecoy))
+                : "폼 안의 코드를 써야 decoy 가 아니다";
+
+        // 댓글 폼이 없으면 코드가 있어도 빈 문자열을 돌려야 한다
+        String pageWithoutForm =
+                "<div><input type=\"hidden\" name=\"post_code\" value=\"p20260809213e43a4f8ac7\">" +
+                "<input type=\"hidden\" name=\"board_code\" value=\"b20260808bcd2709bb86e5\"></div>";
+        assert CommentParser.postCode(pageWithoutForm).isEmpty()
+                : "댓글 폼이 없으면 신뢰할 수 없다";
+        assert CommentParser.boardCode(pageWithoutForm).isEmpty()
+                : "댓글 폼이 없으면 신뢰할 수 없다";
+
+        // ---------------------------------------------------------- 추적 목록
+        long now = 1_760_000_000_000L;
+        long day = 24L * 60 * 60 * 1000;
+
+        List<TrackedPosts.Tracked> tracked = new ArrayList<>();
+        tracked = TrackedPosts.add(tracked, "https://www.illusionlive.com/eb?idx=1",
+                "p2026090300000000000a1", "b2026090300000000000b1", TrackedPosts.MY_POST, now);
+        assert tracked.size() == 1;
+        assert tracked.get(0).reason == TrackedPosts.MY_POST;
+
+        // 같은 글이 다시 들어오면 늘지 않고 사유만 합쳐진다.
+        tracked = TrackedPosts.add(tracked, "https://www.illusionlive.com/eb?idx=1",
+                "p2026090300000000000a1", "b2026090300000000000b1", TrackedPosts.MY_COMMENT, now);
+        assert tracked.size() == 1 : "같은 url 은 한 줄";
+        assert tracked.get(0).reason == (TrackedPosts.MY_POST | TrackedPosts.MY_COMMENT);
+
+        // 3일이 지난 항목은 다음 add 에서 사라진다.
+        List<TrackedPosts.Tracked> aged = TrackedPosts.add(tracked,
+                "https://www.illusionlive.com/eb?idx=2",
+                "p2026090300000000000a2", "b2026090300000000000b1",
+                TrackedPosts.MY_POST, now + 4 * day);
+        assert aged.size() == 1 : "3일 지난 첫 글은 빠진다";
+        assert aged.get(0).url.endsWith("idx=2");
+
+        // 상한 20개. 21번째가 들어오면 가장 오래 전에 등록된 것이 빠진다.
+        List<TrackedPosts.Tracked> many = new ArrayList<>();
+        for (int i = 0; i < 25; i++) {
+            many = TrackedPosts.add(many, "https://www.illusionlive.com/eb?idx=" + i,
+                    "p2026090300000000000a1", "b2026090300000000000b1",
+                    TrackedPosts.MY_POST, now + i);
+        }
+        assert many.size() == TrackedPosts.MAX : "상한 " + TrackedPosts.MAX + ", 실제 " + many.size();
+        assert many.get(0).url.endsWith("idx=24") : "가장 최근 등록이 앞";
+
+        // 확인 순서: 확인한 지 오래된 것부터, 최대 limit 개.
+        List<TrackedPosts.Tracked> queue = TrackedPosts.due(many, 8);
+        assert queue.size() == 8;
+        List<TrackedPosts.Tracked> after = TrackedPosts.markChecked(many, queue.get(0).url, now + 100);
+        assert TrackedPosts.due(after, 1).get(0).url.equals(queue.get(1).url)
+                : "방금 확인한 글은 뒤로 밀린다";
+
+        // 왕복 인코딩.
+        String encoded = TrackedPosts.encode(many);
+        List<TrackedPosts.Tracked> decoded = TrackedPosts.decode(encoded);
+        assert decoded.size() == many.size();
+        assert decoded.get(0).url.equals(many.get(0).url);
+        assert decoded.get(0).postCode.equals(many.get(0).postCode);
+        assert decoded.get(0).boardCode.equals(many.get(0).boardCode);
+        assert decoded.get(0).added == many.get(0).added;
+        assert decoded.get(0).checked == many.get(0).checked;
+        assert decoded.get(0).reason == many.get(0).reason;
+        assert TrackedPosts.decode("").isEmpty();
+        assert TrackedPosts.decode("깨진줄").isEmpty() : "필드 수가 안 맞으면 그 줄은 버린다";
+
+        // 저장된 코드의 접두 문자도 검사한다. 필드 순서를 바꾸면 걸린다.
+        char UNIT = 0x1f;
+        char RECORD = 0x1e;
+        String swappedCodes = "https://www.illusionlive.com/eb?idx=5" + UNIT
+                + "b2026090300000000000b1" + UNIT  // postCode 자리에 b-접두 코드
+                + "p2026090300000000000a1" + UNIT  // boardCode 자리에 p-접두 코드
+                + now + UNIT + "0" + UNIT + "1";
+        assert TrackedPosts.decode(swappedCodes).isEmpty()
+                : "postCode/boardCode 가 뒤바뀐 저장 행은 버린다";
+
+        // 형식이 틀린 코드는 애초에 들어가지 않는다.
+        List<TrackedPosts.Tracked> rejected = TrackedPosts.add(new ArrayList<TrackedPosts.Tracked>(),
+                "https://www.illusionlive.com/eb?idx=3", "p../../x", "b2026090300000000000b1",
+                TrackedPosts.MY_POST, now);
+        assert rejected.isEmpty() : "형식이 틀린 post_code 는 거부";
+
+        // http 링크는 저장하지 않는다. 알림을 눌렀을 때 여는 주소이기 때문이다.
+        List<TrackedPosts.Tracked> insecure = TrackedPosts.add(new ArrayList<TrackedPosts.Tracked>(),
+                "http://www.illusionlive.com/eb?idx=4", "p2026090300000000000a1",
+                "b2026090300000000000b1", TrackedPosts.MY_POST, now);
+        assert insecure.isEmpty() : "https 가 아니면 거부";
+
+        // ---------------------------------------------------------- 재스캔 후보
+        // 발견 스캔은 RSS 를 새 글부터 연다. added 에 게시 시각을 넣으므로 오래된 글이 나중에
+        // 들어와도 상한은 게시가 가장 이른 글부터 자른다.
+        List<TrackedPosts.Tracked> candidates = new ArrayList<>();
+        for (int i = 24; i >= 0; i--) {
+            candidates = TrackedPosts.addCandidate(candidates, new TrackedPosts.Tracked(
+                    "https://www.illusionlive.com/eb?idx=" + i,
+                    "p2026090300000000000a1", "b2026090300000000000b1",
+                    now - day + i, now, 0), now);
+        }
+        assert candidates.size() == TrackedPosts.MAX
+                : "후보 상한 " + TrackedPosts.MAX + ", 실제 " + candidates.size();
+        assert candidates.get(0).url.endsWith("idx=24") : "게시가 가장 최근인 글이 앞";
+        assert !TrackedPosts.contains(candidates, "https://www.illusionlive.com/eb?idx=4")
+                : "게시가 가장 이른 글부터 잘린다";
+        assert TrackedPosts.contains(candidates, "https://www.illusionlive.com/eb?idx=5");
+
+        // 늦게 들어와도 게시가 더 최근이면 남는다. addCandidate 가 added 를 now 로 덮으면 여기서 틀린다.
+        List<TrackedPosts.Tracked> late = TrackedPosts.addCandidate(candidates,
+                new TrackedPosts.Tracked("https://www.illusionlive.com/eb?idx=99",
+                        "p2026090300000000000a1", "b2026090300000000000b1",
+                        now - day + 30, now, 0), now);
+        assert late.get(0).url.endsWith("idx=99") : "늦게 들어온 최신 글이 앞";
+        assert !TrackedPosts.contains(late, "https://www.illusionlive.com/eb?idx=5")
+                : "상한에서는 게시가 가장 이른 글이 빠진다";
+
+        // 같은 url 은 한 번만 들어가고 먼저 있던 값이 남는다.
+        List<TrackedPosts.Tracked> again = TrackedPosts.addCandidate(candidates,
+                new TrackedPosts.Tracked("https://www.illusionlive.com/eb?idx=24",
+                        "p2026090300000000000a1", "b2026090300000000000b1", now, now + 5, 0), now);
+        assert again.size() == candidates.size() : "같은 url 은 늘지 않는다";
+        assert again.get(0).checked == now : "먼저 있던 항목이 그대로 남는다";
+
+        // 게시한 지 3일이 지난 글과 형식이 틀린 코드는 후보가 되지 않는다.
+        assert TrackedPosts.addCandidate(new ArrayList<TrackedPosts.Tracked>(),
+                new TrackedPosts.Tracked("https://www.illusionlive.com/eb?idx=30",
+                        "p2026090300000000000a1", "b2026090300000000000b1",
+                        now - 4 * day, now, 0), now).isEmpty()
+                : "게시 3일이 지난 글은 후보가 아니다";
+        assert TrackedPosts.addCandidate(new ArrayList<TrackedPosts.Tracked>(),
+                new TrackedPosts.Tracked("https://www.illusionlive.com/eb?idx=31",
+                        "b2026090300000000000b1", "p2026090300000000000a1", now, now, 0), now).isEmpty()
+                : "postCode/boardCode 가 뒤바뀐 후보는 거부";
+
+        // 이미 추적 중인 글은 재스캔 대상에서 빠진다.
+        List<TrackedPosts.Tracked> watching = TrackedPosts.add(new ArrayList<TrackedPosts.Tracked>(),
+                "https://www.illusionlive.com/eb?idx=24", "p2026090300000000000a1",
+                "b2026090300000000000b1", TrackedPosts.MY_COMMENT, now);
+        List<TrackedPosts.Tracked> rest = TrackedPosts.without(candidates, watching);
+        assert rest.size() == candidates.size() - 1 : "추적 중인 글 하나만 빠진다";
+        assert !TrackedPosts.contains(rest, "https://www.illusionlive.com/eb?idx=24");
+        assert TrackedPosts.contains(rest, "https://www.illusionlive.com/eb?idx=23");
+
+        // ---------------------------------------------------------- 보관 기준
+        // 창 경계: 게시 후 TTL_MS 가 지나면 밖, 날짜를 못 읽은 글(0)은 안.
+        FeedParser.Post undated = new FeedParser.Post("g-undated", "eb", "t", "a", 0,
+                "https://www.illusionlive.com/eb?idx=40");
+        FeedParser.Post recent = new FeedParser.Post("g-recent", "eb", "t", "a", now - day,
+                "https://www.illusionlive.com/eb?idx=41");
+        FeedParser.Post expired = new FeedParser.Post("g-expired", "eb", "t", "a",
+                now - TrackedPosts.TTL_MS, "https://www.illusionlive.com/eb?idx=42");
+        FeedParser.Post inside = new FeedParser.Post("g-inside", "eb", "t", "a",
+                now - TrackedPosts.TTL_MS + 1, "https://www.illusionlive.com/eb?idx=43");
+        assert !TrackedPosts.outsideWindow(undated, now) : "날짜 없는 글은 창 안";
+        assert !TrackedPosts.outsideWindow(inside, now) : "TTL 직전은 창 안";
+        assert TrackedPosts.outsideWindow(expired, now) : "TTL 이 지나면 창 밖";
+
+        // scanned 는 캐시에 남아 있고 창 안인 글만 남긴다. 개수로 자르지 않는다.
+        Set<String> scannedIds = new HashSet<>(Arrays.asList(
+                "g-undated", "g-recent", "g-expired", "g-gone"));
+        Set<String> kept = TrackedPosts.keepScanned(
+                Arrays.asList(undated, recent, expired, inside), scannedIds, now);
+        assert kept.equals(new HashSet<>(Arrays.asList("g-undated", "g-recent")))
+                : "창 안이면서 연 적 있는 글만 남는다: " + kept;
+
+        // seen 은 날짜가 최신인 코드부터 남긴다.
+        Set<String> codes = new HashSet<>(Arrays.asList(
+                "c20260901000000000000a1", "c20260914000000000000a1", "c20260910000000000000a1"));
+        assert CommentRules.newestCodes(codes, 2).equals(new HashSet<>(Arrays.asList(
+                "c20260914000000000000a1", "c20260910000000000000a1")))
+                : "가장 오래된 코드가 빠진다";
+        assert CommentRules.newestCodes(codes, 5).size() == 3 : "상한보다 적으면 전부 남는다";
+
+        // ------------------------------------------------------------ 알림 규칙
+        List<CommentParser.Comment> thread = new ArrayList<>();
+        thread.add(new CommentParser.Comment("c1", "위즐리어카", "m1", "밑에 영상 링크가 잘못된 것 같아염"));
+        thread.add(new CommentParser.Comment("c2", "유메루", "m2", "이거 맞아염"));
+        thread.add(new CommentParser.Comment("c3", "현랑화", "m3", "앞으로도 즐겁고 행복한 활동 하길!"));
+        thread.add(new CommentParser.Comment("c4", "유메루", "m2", "앞으로도 잘 부탁해!!"));
+        Set<String> none = new HashSet<>();
+
+        // 내 댓글 바로 다음 한 건만.
+        List<CommentParser.Comment> mine = CommentRules.pick(
+                thread, none, "위즐리어카", TrackedPosts.MY_COMMENT, true, true);
+        assert mine.size() == 1 : "바로 다음 한 건, 실제 " + mine.size();
+        assert "c2".equals(mine.get(0).code);
+
+        List<CommentParser.Comment> hers = CommentRules.pick(
+                thread, none, "현랑화", TrackedPosts.MY_COMMENT, true, true);
+        assert hers.size() == 1 && "c4".equals(hers.get(0).code) : "c3 다음은 c4";
+
+        // 내 글이면 그 글의 새 댓글 전부. 단 내가 쓴 댓글은 빼고.
+        List<CommentParser.Comment> onMyPost = CommentRules.pick(
+                thread, none, "유메루", TrackedPosts.MY_POST, true, true);
+        assert onMyPost.size() == 2 : "내 댓글 두 개를 뺀 나머지, 실제 " + onMyPost.size();
+        assert "c1".equals(onMyPost.get(0).code) && "c3".equals(onMyPost.get(1).code);
+
+        // 이미 본 댓글은 다시 알리지 않는다.
+        Set<String> seenC2 = new HashSet<>(Arrays.asList("c2"));
+        assert CommentRules.pick(thread, seenC2, "위즐리어카",
+                TrackedPosts.MY_COMMENT, true, true).isEmpty() : "본 댓글은 제외";
+
+        // 스위치가 꺼져 있으면 그 사유는 아무것도 고르지 않는다.
+        assert CommentRules.pick(thread, none, "위즐리어카",
+                TrackedPosts.MY_COMMENT, true, false).isEmpty() : "스위치2 off";
+        assert CommentRules.pick(thread, none, "유메루",
+                TrackedPosts.MY_POST, false, true).isEmpty() : "스위치1 off";
+
+        // 두 사유가 겹쳐도 같은 댓글이 두 번 나오지 않는다.
+        List<CommentParser.Comment> both = CommentRules.pick(thread, none, "위즐리어카",
+                TrackedPosts.MY_POST | TrackedPosts.MY_COMMENT, true, true);
+        assert both.size() == 3 : "c2·c3·c4 세 건, 실제 " + both.size();
+        assert "c2".equals(both.get(0).code) && "c4".equals(both.get(2).code) : "순서 유지";
+
+        // 닉네임이 비어 있으면 아무것도 알리지 않는다.
+        assert CommentRules.pick(thread, none, "", TrackedPosts.MY_POST, true, true).isEmpty()
+                : "닉네임 없으면 기능 자체가 꺼진 상태";
+
         System.out.println("SELF-TEST PASS");
     }
 }

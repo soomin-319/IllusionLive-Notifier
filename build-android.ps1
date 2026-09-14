@@ -48,9 +48,12 @@ $java = Join-Path $jdk 'bin\java.exe'
 $jar = Join-Path $jdk 'bin\jar.exe'
 $parser = Join-Path $input.FullName 'src\com\illusionlive\notifier\FeedParser.java'
 $colors = Join-Path $input.FullName 'src\com\illusionlive\notifier\MemberColors.java'
+$commentParser = Join-Path $input.FullName 'src\com\illusionlive\notifier\CommentParser.java'
+$trackedPosts = Join-Path $input.FullName 'src\com\illusionlive\notifier\TrackedPosts.java'
+$commentRules = Join-Path $input.FullName 'src\com\illusionlive\notifier\CommentRules.java'
 $selfTest = Join-Path $input.FullName 'tests\com\illusionlive\notifier\SelfTest.java'
 
-& $javac --release 8 -encoding UTF-8 -Xlint:all -Werror -d $testClasses.FullName $parser $colors $selfTest
+& $javac --release 8 -encoding UTF-8 -Xlint:all -Werror -d $testClasses.FullName $parser $colors $commentParser $trackedPosts $commentRules $selfTest
 Assert-Exit 'Parser test compile'
 & $java -ea -cp $testClasses.FullName com.illusionlive.notifier.SelfTest
 Assert-Exit 'Parser self-test'
@@ -61,7 +64,7 @@ $baseApk = Join-Path $build 'base.apk'
 Assert-Exit 'Resource compile'
 & (Join-Path $tools 'aapt2.exe') link -o $baseApk -I $androidJar `
     --manifest (Join-Path $input.FullName 'AndroidManifest.xml') `
-    --min-sdk-version 26 --target-sdk-version 36 --version-code 13 --version-name 1.0.12 `
+    --min-sdk-version 26 --target-sdk-version 36 --version-code 14 --version-name 1.1.0 `
     --java $gen.FullName $compiledResources
 Assert-Exit 'APK resource link'
 
