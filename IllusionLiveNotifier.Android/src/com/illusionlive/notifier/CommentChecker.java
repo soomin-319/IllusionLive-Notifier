@@ -338,8 +338,9 @@ final class CommentChecker {
                 }
                 if (!mine(comments, nickname)) continue;
 
-                // 방금 단 댓글이다. 기준점으로만 남기면 그 사이 달린 답을 삼키므로 확인한 것으로
-                // 두고 지금 알린다. 한 바퀴 안에 찾으므로 그 답은 오래된 것이 아니다.
+                // 이 시점에 찾은 내 댓글은 보통 한 바퀴 안에 쓴 것이라 답도 최근이다. 다만
+                // 스위치2를 껐다 켜면 꺼진 동안 달린 답도 여기서 한 번은 알린다 - 두 스위치가
+                // 모두 꺼져 있을 때 run() 이 일찍 끝나 아무것도 흡수하지 않는 것과 같은 이치다.
                 tracked = TrackedPosts.add(tracked, candidate.url, candidate.postCode,
                         candidate.boardCode, TrackedPosts.MY_COMMENT, now);
                 tracked = TrackedPosts.markChecked(tracked, candidate.url, now);
@@ -360,7 +361,8 @@ final class CommentChecker {
             if (!nickname.equals(nickname(context))) return;
             preferences.edit()
                     .putString(KEY_TRACKED, TrackedPosts.encode(tracked))
-                    .putString(KEY_CANDIDATES, TrackedPosts.encode(TrackedPosts.prune(candidates, now)))
+                    .putString(KEY_CANDIDATES, TrackedPosts.encode(
+                            TrackedPosts.prune(TrackedPosts.without(candidates, tracked), now)))
                     .putStringSet(KEY_SCANNED, capped(scannedNow, scannedBefore, MAX_SCANNED))
                     .putStringSet(KEY_SEEN, capped(seenNow, seen, MAX_SEEN))
                     .commit();
