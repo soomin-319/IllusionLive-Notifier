@@ -64,7 +64,7 @@ $baseApk = Join-Path $build 'base.apk'
 Assert-Exit 'Resource compile'
 & (Join-Path $tools 'aapt2.exe') link -o $baseApk -I $androidJar `
     --manifest (Join-Path $input.FullName 'AndroidManifest.xml') `
-    --min-sdk-version 26 --target-sdk-version 36 --version-code 13 --version-name 1.0.12 `
+    --min-sdk-version 26 --target-sdk-version 36 --version-code 14 --version-name 1.1.0 `
     --java $gen.FullName $compiledResources
 Assert-Exit 'APK resource link'
 
